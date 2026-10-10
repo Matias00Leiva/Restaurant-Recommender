@@ -1,0 +1,8 @@
+{
+  "deno.enable": true,
+  "deno.enablePaths": ["./backend"],
+  "deno.config": "./backend/deno.json",
+  "deno.path": "/home/Mati/.deno/bin/deno",
+  "deno.lint": true,
+  "editor.formatOnSave": true
+}
