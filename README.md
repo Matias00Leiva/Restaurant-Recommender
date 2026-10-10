@@ -273,8 +273,5 @@ This backend was developed with assistance from ChatGPT/Codex in preparing and e
 - [Deno documentation](https://docs.deno.com/).
 - [SQLite with Deno](https://docs.deno.com/examples/sqlite/).
 - [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
-<<<<<<< Updated upstream
 - [jose library](https://github.com/panva/jose).
-=======
 - [jose library](https://github.com/panva/jose).
->>>>>>> Stashed changes
