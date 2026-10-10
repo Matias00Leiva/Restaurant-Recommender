@@ -139,13 +139,11 @@ Este backend se elaboró con asistencia de ChatGPT/Codex para la preparación y 
 
 
 
-<<<<<<< Updated upstream
+
 
 
 ## English version: 
-=======
-## English Version 
->>>>>>> Stashed changes
+
 
 ## Backend
 
