@@ -275,3 +275,4 @@ This backend was developed with assistance from ChatGPT/Codex in preparing and e
 - [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
 - [jose library](https://github.com/panva/jose).
 - [jose library](https://github.com/panva/jose).
+- [jose library](https://github.com/panva/jose).
