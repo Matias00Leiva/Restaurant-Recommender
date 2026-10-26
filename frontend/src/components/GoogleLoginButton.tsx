@@ -4,4 +4,4 @@ export default function GoogleLoginButton() {
       Continuar con Google
     </a>
   );
-}
+} // se exporta el componente GoogleLoginButton para que pueda ser utilizado en otras partes de la aplicación.
