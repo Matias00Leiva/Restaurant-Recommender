@@ -28,4 +28,61 @@ database.exec(`
     code_verifier TEXT NOT NULL,
     expires_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS restaurants (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  category TEXT NOT NULL,
+  address TEXT NOT NULL,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  image_url TEXT
+);
 `); // ejecutamos una serie de comandos SQL para configurar la base de datos. Esto incluye habilitar las claves foráneas y crear tres tablas: "users", "sessions" y "oauth_states", si no existen ya. Cada tabla tiene sus propias columnas y restricciones, como claves primarias y referencias a otras tablas.
+
+
+database.prepare(`
+  INSERT OR IGNORE INTO restaurants
+  (id, name, description, category, address, latitude, longitude, image_url)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  "restaurant-1",
+  "Sushi Central",
+  "Restaurante especializado en sushi y comida japonesa.",
+  "Japonesa",
+  "Viña del Mar",
+  -33.0245,
+  -71.5518,
+  null,
+);
+
+database.prepare(`
+  INSERT OR IGNORE INTO restaurants
+  (id, name, description, category, address, latitude, longitude, image_url)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  "restaurant-2",
+  "Burger House",
+  "Restaurante especializado en hamburguesas.",
+  "Hamburguesas",
+  "Valparaíso",
+  -33.0472,
+  -71.6127,
+  null,
+);
+
+database.prepare(`
+  INSERT OR IGNORE INTO restaurants
+  (id, name, description, category, address, latitude, longitude, image_url)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  "restaurant-3",
+  "Pasta Bella",
+  "Restaurante especializado en comida italiana.",
+  "Italiana",
+  "Viña del Mar",
+  -33.0153,
+  -71.5500,
+  null,
+);

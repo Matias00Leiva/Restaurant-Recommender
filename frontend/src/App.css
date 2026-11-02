@@ -89,3 +89,28 @@ img {
 
   font-size: 14px;
 }
+
+.restaurant-list {
+  width: 100%;
+  margin: 32px 0;
+}
+
+.restaurant-card {
+  width: 100%;
+  padding: 20px;
+  margin-bottom: 16px;
+
+  background: white;
+  border-radius: 12px;
+
+  text-align: left;
+}
+
+.restaurant-card h3 {
+  margin-top: 0;
+  color: #6c4bd3;
+}
+
+.restaurant-card p {
+  margin: 8px 0;
+}

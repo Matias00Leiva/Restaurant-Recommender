@@ -1,5 +1,6 @@
 import { authRoutes } from "./routes/authRoutes.ts"; // importamos la función authRoutes desde el archivo authRoutes.ts para poder manejar las rutas de autenticación en la aplicación. Esta función se encarga de procesar las solicitudes HTTP entrantes relacionadas con la autenticación, como iniciar y finalizar el inicio de sesión con Google, obtener la información del usuario actual y cerrar la sesión del usuario. Esto nos permite centralizar y organizar el manejo de la autenticación en un solo lugar, facilitando el mantenimiento y la escalabilidad de la aplicación.
 import { env } from "./config/env.ts";
+import { restaurantRoutes } from "./routes/restaurantRoutes.ts";
 
 export async function app(request: Request): Promise<Response> {
   let response: Response; // declaramos una variable response de tipo Response que se utilizará para almacenar la respuesta HTTP que se devolverá al cliente después de procesar la solicitud entrante. Esto nos permite construir y personalizar la respuesta en función de la ruta y el método de la solicitud, así como manejar posibles errores de manera consistente en toda la aplicación.
@@ -12,6 +13,8 @@ export async function app(request: Request): Promise<Response> {
       response = Response.json({ status: "ok" }); // devolvemos una respuesta JSON con un estado "ok" para indicar que la aplicación está funcionando correctamente. Esto nos permite monitorear y verificar la disponibilidad de la aplicación de manera sencilla y confiable.
     } else {
       response = await authRoutes(request) ??
+      restaurantRoutes(request) ??
+
         Response.json({ error: "not_found" }, { status: 404 }); // si la solicitud HTTP entrante no coincide con la ruta /api/health, llamamos a la función authRoutes pasando la solicitud como argumento para manejar las rutas de autenticación. Si authRoutes devuelve null (lo que indica que no se encontró una ruta coincidente), devolvemos una respuesta JSON con un error "not_found" y un estado 404 (No encontrado) para indicar que la ruta solicitada no existe en la aplicación. Esto nos permite manejar las rutas de autenticación de manera centralizada y consistente en toda la aplicación, asegurando que solo las rutas definidas sean procesadas y proporcionando una forma clara de manejar las solicitudes no encontradas.
     }
   } // intentamos procesar la solicitud HTTP entrante utilizando un bloque try-catch para manejar posibles errores de manera segura y consistente en toda la aplicación. Dentro del bloque try, verificamos si la solicitud es una solicitud GET a la ruta /api/health, en cuyo caso devolvemos una respuesta JSON con un estado "ok" para indicar que la aplicación está funcionando correctamente. Si la solicitud no coincide con esta ruta, llamamos a la función authRoutes pasando la solicitud como argumento para manejar las rutas de autenticación. Si authRoutes devuelve null (lo que indica que no se encontró una ruta coincidente), devolvemos una respuesta JSON con un error "not_found" y un estado 404 (No encontrado) para indicar que la ruta solicitada no existe en la aplicación.

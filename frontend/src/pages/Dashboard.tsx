@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCurrentUser, logout } from "../services/authService";
+import RestaurantList from "../components/RestaurantList.tsx";
 
 interface User {
   id: string;
@@ -58,6 +59,7 @@ export default function Dashboard() {
       )}
 
       <p>{user.email}</p>
+      <RestaurantList />
       <button onClick={handleLogout}>
         Cerrar sesión
         </button>
