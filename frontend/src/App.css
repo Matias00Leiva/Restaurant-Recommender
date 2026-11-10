@@ -114,3 +114,27 @@ img {
 .restaurant-card p {
   margin: 8px 0;
 }
+
+
+.restaurant-filters {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 24px 0;
+}
+
+.restaurant-filters input,
+.restaurant-filters select {
+  width: 100%;
+  max-width: 320px;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.restaurant-filters button {
+  margin: 0;
+}

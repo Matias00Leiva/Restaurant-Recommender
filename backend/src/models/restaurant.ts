@@ -7,4 +7,5 @@ export interface Restaurant {
   latitude: number;
   longitude: number;
   imageUrl: string | null;
+  averagePrice: number;
 }

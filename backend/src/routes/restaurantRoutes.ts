@@ -7,7 +7,7 @@ export function restaurantRoutes(request: Request): Response | null {
     request.method === "GET" &&
     path === "/api/restaurants"
   ) {
-    return listRestaurants();
+    return listRestaurants(request);
   }
 
   return null;

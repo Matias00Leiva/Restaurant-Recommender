@@ -86,3 +86,24 @@ database.prepare(`
   -71.5500,
   null,
 );
+
+const restaurantColumns = database
+  .prepare("PRAGMA table_info(restaurants)")
+  .all() as { name: string }[];
+
+if (!restaurantColumns.some((column) => column.name === "average_price")) {
+  database.exec(`
+    ALTER TABLE restaurants
+    ADD COLUMN average_price INTEGER NOT NULL DEFAULT 12000;
+  `);
+
+  database.exec(`
+    UPDATE restaurants
+    SET average_price = CASE id
+      WHEN 'restaurant-1' THEN 15000
+      WHEN 'restaurant-2' THEN 11000
+      WHEN 'restaurant-3' THEN 13000
+      ELSE average_price
+    END;
+  `);
+}
