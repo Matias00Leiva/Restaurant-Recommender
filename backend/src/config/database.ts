@@ -107,3 +107,26 @@ if (!restaurantColumns.some((column) => column.name === "average_price")) {
     END;
   `);
 }
+
+
+database.exec(`
+  CREATE TABLE IF NOT EXISTS ratings (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    restaurant_id TEXT NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, restaurant_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS search_history (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    search TEXT NOT NULL,
+    category TEXT NOT NULL,
+    max_price INTEGER,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_search_history_user
+  ON search_history(user_id, created_at DESC);
+`);

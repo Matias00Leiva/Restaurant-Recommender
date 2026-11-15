@@ -9,6 +9,8 @@ export interface Restaurant {
   longitude: number;
   imageUrl: string | null;
   averagePrice: number;
+  averageRating: number | null;
+  ratingCount: number;
 }
 
 export interface RestaurantFilters {

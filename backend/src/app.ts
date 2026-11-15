@@ -1,33 +1,75 @@
-import { authRoutes } from "./routes/authRoutes.ts"; // importamos la función authRoutes desde el archivo authRoutes.ts para poder manejar las rutas de autenticación en la aplicación. Esta función se encarga de procesar las solicitudes HTTP entrantes relacionadas con la autenticación, como iniciar y finalizar el inicio de sesión con Google, obtener la información del usuario actual y cerrar la sesión del usuario. Esto nos permite centralizar y organizar el manejo de la autenticación en un solo lugar, facilitando el mantenimiento y la escalabilidad de la aplicación.
+
+import { authRoutes } from "./routes/authRoutes.ts";
 import { env } from "./config/env.ts";
 import { restaurantRoutes } from "./routes/restaurantRoutes.ts";
+import { activityRoutes } from "./routes/activityRoutes.ts";
 
 export async function app(request: Request): Promise<Response> {
-  let response: Response; // declaramos una variable response de tipo Response que se utilizará para almacenar la respuesta HTTP que se devolverá al cliente después de procesar la solicitud entrante. Esto nos permite construir y personalizar la respuesta en función de la ruta y el método de la solicitud, así como manejar posibles errores de manera consistente en toda la aplicación.
+  let response: Response;
 
   try {
-    if (
+    // Handle CORS preflight requests.
+    if (request.method === "OPTIONS") {
+      response = request.headers.get("origin") === env.frontendOrigin
+        ? new Response(null, { status: 204 })
+        : Response.json(
+          { error: "forbidden" },
+          { status: 403 },
+        );
+
+    // Check if the backend is running.
+    } else if (
       request.method === "GET" &&
-      new URL(request.url).pathname === "/api/health" // verificamos si la solicitud HTTP entrante es una solicitud GET a la ruta /api/health. Esta ruta se utiliza para comprobar el estado de la aplicación y asegurarnos de que está funcionando correctamente. Si la solicitud coincide con esta ruta, devolvemos una respuesta JSON con un estado "ok" para indicar que la aplicación está en buen estado. Esto nos permite monitorear y verificar la disponibilidad de la aplicación de manera sencilla y confiable.
+      new URL(request.url).pathname === "/api/health"
     ) {
-      response = Response.json({ status: "ok" }); // devolvemos una respuesta JSON con un estado "ok" para indicar que la aplicación está funcionando correctamente. Esto nos permite monitorear y verificar la disponibilidad de la aplicación de manera sencilla y confiable.
+      response = Response.json({ status: "ok" });
+
+    // Process authentication, activity, and restaurant routes.
     } else {
-      response = await authRoutes(request) ??
-      restaurantRoutes(request) ??
-
-        Response.json({ error: "not_found" }, { status: 404 }); // si la solicitud HTTP entrante no coincide con la ruta /api/health, llamamos a la función authRoutes pasando la solicitud como argumento para manejar las rutas de autenticación. Si authRoutes devuelve null (lo que indica que no se encontró una ruta coincidente), devolvemos una respuesta JSON con un error "not_found" y un estado 404 (No encontrado) para indicar que la ruta solicitada no existe en la aplicación. Esto nos permite manejar las rutas de autenticación de manera centralizada y consistente en toda la aplicación, asegurando que solo las rutas definidas sean procesadas y proporcionando una forma clara de manejar las solicitudes no encontradas.
+      response = (await authRoutes(request)) ??
+        (await activityRoutes(request)) ??
+        restaurantRoutes(request) ??
+        Response.json(
+          { error: "not_found" },
+          { status: 404 },
+        );
     }
-  } // intentamos procesar la solicitud HTTP entrante utilizando un bloque try-catch para manejar posibles errores de manera segura y consistente en toda la aplicación. Dentro del bloque try, verificamos si la solicitud es una solicitud GET a la ruta /api/health, en cuyo caso devolvemos una respuesta JSON con un estado "ok" para indicar que la aplicación está funcionando correctamente. Si la solicitud no coincide con esta ruta, llamamos a la función authRoutes pasando la solicitud como argumento para manejar las rutas de autenticación. Si authRoutes devuelve null (lo que indica que no se encontró una ruta coincidente), devolvemos una respuesta JSON con un error "not_found" y un estado 404 (No encontrado) para indicar que la ruta solicitada no existe en la aplicación.
-    catch {
-    console.error("Request failed."); // si ocurre un error durante el procesamiento de la solicitud HTTP entrante, capturamos la excepción en el bloque catch y registramos un mensaje de error en la consola para indicar que la solicitud falló. Esto nos permite manejar los errores de manera segura y consistente en toda la aplicación, proporcionando una forma clara de informar a los desarrolladores sobre problemas internos del servidor.
-    response = Response.json({ error: "internal_error" }, { status: 500 }); // si ocurre un error durante el procesamiento de la solicitud HTTP entrante, capturamos la excepción en el bloque catch y registramos un mensaje de error en la consola para indicar que la solicitud falló. Luego, devolvemos una respuesta JSON con un error "internal_error" y un estado 500 (Error interno del servidor) para indicar que ocurrió un problema en el servidor al procesar la solicitud. Esto nos permite manejar los errores de manera segura y consistente en toda la aplicación, proporcionando una forma clara de informar a los clientes sobre problemas internos del servidor.
-  }// si ocurre un error durante el procesamiento de la solicitud HTTP entrante, capturamos la excepción en el bloque catch y registramos un mensaje de error en la consola para indicar que la solicitud falló. Luego, devolvemos una respuesta JSON con un error "internal_error" y un estado 500 (Error interno del servidor) para indicar que ocurrió un problema en el servidor al procesar la solicitud. Esto nos permite manejar los errores de manera segura y consistente en toda la aplicación, proporcionando una forma clara de informar a los clientes sobre problemas internos del servidor.
+  } catch {
+    console.error("Request failed.");
 
-  response.headers.set("cache-control", "no-store"); // establecemos el encabezado "cache-control" de la respuesta HTTP para indicar que la respuesta no debe ser almacenada en caché por los clientes o proxies intermedios. Esto nos permite garantizar que los clientes siempre reciban la información más reciente y actualizada de la aplicación, evitando problemas de sincronización y asegurando una experiencia de usuario consistente y confiable.  
-  response.headers.set("referrer-policy", "no-referrer"); // establecemos el encabezado "referrer-policy" de la respuesta HTTP para indicar que no se debe enviar información de referencia (referrer) en las solicitudes salientes. Esto nos permite proteger la privacidad del usuario y evitar la filtración de información sensible a través de los encabezados de referencia, asegurando una experiencia de usuario más segura y confiable.
-  response.headers.set("x-content-type-options", "nosniff"); // establecemos el encabezado "x-content-type-options" de la respuesta HTTP para indicar que los navegadores no deben intentar adivinar el tipo de contenido de la respuesta. Esto nos permite proteger la seguridad del usuario y evitar ataques de tipo MIME sniffing, asegurando que los navegadores interpreten correctamente el tipo de contenido de la respuesta y proporcionando una experiencia de usuario más segura y confiable.
-  response.headers.set("access-control-allow-origin", env.frontendOrigin);
-  response.headers.set("access-control-allow-credentials", "true");
-  
+    response = Response.json(
+      { error: "internal_error" },
+      { status: 500 },
+    );
+  }
+
+  // Security and cache headers.
+  response.headers.set("cache-control", "no-store");
+  response.headers.set("referrer-policy", "no-referrer");
+  response.headers.set("x-content-type-options", "nosniff");
+
+  // CORS configuration.
+  response.headers.set(
+    "access-control-allow-origin",
+    env.frontendOrigin,
+  );
+
+  response.headers.set(
+    "access-control-allow-credentials",
+    "true",
+  );
+
+  response.headers.set(
+    "access-control-allow-methods",
+    "GET, POST, OPTIONS",
+  );
+
+  response.headers.set(
+    "access-control-allow-headers",
+    "Content-Type",
+  );
+
+  response.headers.append("vary", "Origin");
+
   return response;
-} // la función app es el punto de entrada principal de la aplicación y se encarga de manejar las solicitudes HTTP entrantes. Toma un objeto Request como parámetro y devuelve una promesa que resuelve a un objeto Response. La función verifica la ruta y el método de la solicitud entrante, llamando a las funciones correspondientes para manejar las rutas de autenticación o devolviendo respuestas adecuadas para rutas no encontradas o errores internos del servidor. Además, establece encabezados de seguridad y control de caché en la respuesta antes de devolverla al cliente, garantizando una experiencia de usuario segura y confiable.
+}

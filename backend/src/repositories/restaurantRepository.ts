@@ -7,6 +7,7 @@ export interface RestaurantFilters {
   maxPrice?: number;
 }
 
+
 const restaurantColumns = `
   id,
   name,
@@ -16,8 +17,19 @@ const restaurantColumns = `
   latitude,
   longitude,
   image_url AS imageUrl,
-  average_price AS averagePrice
+  average_price AS averagePrice,
+  (
+    SELECT ROUND(AVG(rating), 1)
+    FROM ratings
+    WHERE restaurant_id = restaurants.id
+  ) AS averageRating,
+  (
+    SELECT COUNT(*)
+    FROM ratings
+    WHERE restaurant_id = restaurants.id
+  ) AS ratingCount
 `;
+
 
 export function getAllRestaurants(
   filters: RestaurantFilters = {},
