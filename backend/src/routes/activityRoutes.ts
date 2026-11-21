@@ -6,6 +6,9 @@ import {
 } from "../controllers/activityController.ts";
 import { requireAuth } from "../middleware/requireAuth.ts";
 
+import { getRecommendations } from "../services/recommendationService.ts";
+
+
 export async function activityRoutes(
   request: Request,
 ): Promise<Response | null> {
@@ -37,6 +40,20 @@ export async function activityRoutes(
       );
     }
   }
+
+
+if (
+  request.method === "GET" &&
+  path === "/api/recommendations"
+) {
+  return await requireAuth(
+    request,
+    (user) => Response.json({
+      restaurants: getRecommendations(user.id),
+    }),
+  );
+}
+
 
   return null;
 }

@@ -130,3 +130,25 @@ database.exec(`
   CREATE INDEX IF NOT EXISTS idx_search_history_user
   ON search_history(user_id, created_at DESC);
 `);
+
+
+database.exec(`
+  CREATE TABLE IF NOT EXISTS user_restaurant_lists (
+    user_id TEXT NOT NULL
+      REFERENCES users(id) ON DELETE CASCADE,
+
+    restaurant_id TEXT NOT NULL
+      REFERENCES restaurants(id) ON DELETE CASCADE,
+
+    status TEXT NOT NULL
+      CHECK (status IN ('visited', 'to_visit')),
+
+    updated_at TEXT NOT NULL,
+
+    PRIMARY KEY (user_id, restaurant_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_user_restaurant_lists
+  ON user_restaurant_lists(user_id, status);
+`);
+

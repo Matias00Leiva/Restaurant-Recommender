@@ -13,5 +13,7 @@ export const env = {
   googleClientSecret: Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "",
   googleRedirectUri: Deno.env.get("GOOGLE_REDIRECT_URI") ??
     "http://localhost:8000/api/auth/google/callback",
-  sessionDuration: 60 * 60 * 24, // duración de la sesión en segundos (1 día)
+  sessionDuration: 60 * 60 * 24,// duración de la sesión en segundos (1 día)
+  googlePlacesApiKey: Deno.env.get("GOOGLE_PLACES_API_KEY") ?? "",
+ 
 }; // exportamos un objeto env que contiene varias configuraciones de entorno, incluyendo el puerto del servidor, la URL de origen del frontend, las credenciales de Google OAuth y la duración de la sesión en segundos.

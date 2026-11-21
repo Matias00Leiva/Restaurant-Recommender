@@ -1,7 +1,11 @@
+import { useLanguage } from "../i18n/LanguageContext.tsx";
+
 export default function GoogleLoginButton() {
+  const { t } = useLanguage();
+
   return (
     <a href="http://localhost:8000/api/auth/google">
-      Continuar con Google
+      {t("googleButton")}
     </a>
   );
-} // se exporta el componente GoogleLoginButton para que pueda ser utilizado en otras partes de la aplicación.
+}

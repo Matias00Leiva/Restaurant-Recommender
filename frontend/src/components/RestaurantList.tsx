@@ -13,12 +13,27 @@ import {
   rateRestaurant,
   saveSearchHistory,
   type SearchHistoryItem,
-} from "../services/activityService.ts"; 
+} from "../services/activityService.ts";
+
+import {
+  createRestaurantShareUrl,
+} from "../services/shareService.ts";
+
+import { useLanguage } from "../i18n/LanguageContext.tsx";
 
 interface Coordinates {
   latitude: number;
   longitude: number;
 }
+
+type MessageKey =
+  | "restaurantHistoryError"
+  | "restaurantGeoLoading"
+  | "restaurantGeoSuccess"
+  | "restaurantGeoError"
+  | "restaurantGeoUnsupported"
+  | "restaurantRatingSaved"
+  | "restaurantRatingError";
 
 function calculateDistance(
   first: Coordinates,
@@ -39,10 +54,14 @@ function calculateDistance(
 }
 
 export default function RestaurantList() {
+  const { t } = useLanguage();
+
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [history, setHistory] = useState<SearchHistoryItem[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [message, setMessage] = useState("");
+  const [messageKey, setMessageKey] = useState<MessageKey | null>(null);
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
@@ -50,15 +69,19 @@ export default function RestaurantList() {
 
   const [filters, setFilters] = useState<RestaurantFilters>({});
 
-  const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
   const [location, setLocation] = useState<Coordinates | null>(null);
   const [nearbyOnly, setNearbyOnly] = useState(false);
+  const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
 
-  const [history, setHistory] = useState<SearchHistoryItem[]>([]);
+  const [shareFeedback, setShareFeedback] = useState<{
+    restaurantId: string;
+    copied: boolean;
+    url: string;
+  } | null>(null);
 
   const mapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-  // Load restaurants whenever the filters change.
+  // Load restaurants when filters change.
   useEffect(() => {
     let active = true;
 
@@ -81,17 +104,55 @@ export default function RestaurantList() {
     };
   }, [filters]);
 
-  // Load the user's search history.
+  // Load the user's recent searches.
   useEffect(() => {
+    let active = true;
+
     getSearchHistory()
-      .then(setHistory)
-      .catch(() => setHistory([]));
+      .then((data) => {
+        if (active) setHistory(data);
+      })
+      .catch(() => {
+        if (active) setHistory([]);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Apply filters and save the search.
+  // Translate a category without changing its database value.
+  function translateCategory(value: string): string {
+    switch (value) {
+      case "Japonesa":
+        return t("categoryJapanese");
+      case "Italiana":
+        return t("categoryItalian");
+      case "Hamburguesas":
+        return t("categoryBurgers");
+      default:
+        return value;
+    }
+  }
+
+  // Translate the descriptions of the demo restaurants.
+  function translateDescription(value: string): string {
+    switch (value) {
+      case "Restaurante especializado en hamburguesas.":
+        return t("descriptionBurgers");
+      case "Restaurante especializado en comida italiana.":
+        return t("descriptionItalian");
+      case "Restaurante especializado en sushi y comida japonesa.":
+        return t("descriptionJapanese");
+      default:
+        return value;
+    }
+  }
+
+  // Apply filters and save the search history.
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
+    setMessageKey(null);
 
     const nextFilters: RestaurantFilters = {
       search: search.trim(),
@@ -110,19 +171,19 @@ export default function RestaurantList() {
         await saveSearchHistory(nextFilters);
         setHistory(await getSearchHistory());
       } catch {
-        setMessage("Los filtros se aplicaron, pero no se guardó el historial.");
+        setMessageKey("restaurantHistoryError");
       }
     }
   }
 
-  // Request permission to obtain the user's location.
+  // Request permission to access the user's location.
   function useMyLocation() {
     if (!navigator.geolocation) {
-      setMessage("Tu navegador no admite geolocalización.");
+      setMessageKey("restaurantGeoUnsupported");
       return;
     }
 
-    setMessage("Obteniendo ubicación...");
+    setMessageKey("restaurantGeoLoading");
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -132,10 +193,10 @@ export default function RestaurantList() {
         });
 
         setNearbyOnly(true);
-        setMessage("Ubicación obtenida correctamente.");
+        setMessageKey("restaurantGeoSuccess");
       },
       () => {
-        setMessage("No se pudo obtener la ubicación. Revisa los permisos.");
+        setMessageKey("restaurantGeoError");
       },
       {
         enableHighAccuracy: false,
@@ -152,11 +213,31 @@ export default function RestaurantList() {
   ) {
     try {
       await rateRestaurant(restaurantId, rating);
-
       setRestaurants(await getRestaurants(filters));
-      setMessage("Calificación guardada correctamente.");
+      setMessageKey("restaurantRatingSaved");
     } catch {
-      setMessage("No se pudo guardar la calificación.");
+      setMessageKey("restaurantRatingError");
+    }
+  }
+
+  // Copy a shareable restaurant link.
+  async function handleShareRestaurant(restaurantId: string) {
+    const link = createRestaurantShareUrl(restaurantId);
+
+    try {
+      await navigator.clipboard.writeText(link);
+
+      setShareFeedback({
+        restaurantId,
+        copied: true,
+        url: link,
+      });
+    } catch {
+      setShareFeedback({
+        restaurantId,
+        copied: false,
+        url: link,
+      });
     }
   }
 
@@ -194,44 +275,55 @@ export default function RestaurantList() {
 
   return (
     <section className="restaurant-list">
-      <h2>Restaurantes</h2>
+      <h2>{t("restaurantsTitle")}</h2>
 
-      {/* Search and filters */}
+      {/* Search filters */}
       <form
         className="restaurant-filters"
         onSubmit={handleSubmit}
       >
         <input
           type="text"
-          placeholder="Buscar restaurante..."
-          aria-label="Buscar restaurante"
+          placeholder={t("restaurantSearch")}
+          aria-label={t("restaurantSearch")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
 
         <select
-          aria-label="Categoría"
+          aria-label={t("restaurantHistoryCategory")}
           value={category}
           onChange={(event) => setCategory(event.target.value)}
         >
-          <option value="">Todas las categorías</option>
-          <option value="Japonesa">Japonesa</option>
-          <option value="Hamburguesas">Hamburguesas</option>
-          <option value="Italiana">Italiana</option>
+          <option value="">
+            {t("restaurantAllCategories")}
+          </option>
+
+          <option value="Japonesa">
+            {t("categoryJapanese")}
+          </option>
+
+          <option value="Hamburguesas">
+            {t("categoryBurgers")}
+          </option>
+
+          <option value="Italiana">
+            {t("categoryItalian")}
+          </option>
         </select>
 
         <input
           type="number"
           min="0"
           step="1"
-          placeholder="Presupuesto máximo ($)"
-          aria-label="Presupuesto máximo"
+          placeholder={t("restaurantMaxPrice")}
+          aria-label={t("restaurantMaxPrice")}
           value={maxPrice}
           onChange={(event) => setMaxPrice(event.target.value)}
         />
 
         <button type="submit">
-          Aplicar filtros
+          {t("restaurantApplyFilters")}
         </button>
 
         <button
@@ -243,14 +335,14 @@ export default function RestaurantList() {
             setFilters({});
           }}
         >
-          Limpiar filtros
+          {t("restaurantClearFilters")}
         </button>
       </form>
 
-      {/* Geolocation */}
+      {/* Geolocation controls */}
       <div className="location-controls">
         <button type="button" onClick={useMyLocation}>
-          Buscar restaurantes cercanos
+          {t("restaurantNearby")}
         </button>
 
         {location && (
@@ -258,34 +350,60 @@ export default function RestaurantList() {
             type="button"
             onClick={() => setNearbyOnly(!nearbyOnly)}
           >
-            {nearbyOnly ? "Mostrar todos" : "Mostrar a 20 km"}
+            {nearbyOnly
+              ? t("restaurantShowAll")
+              : t("restaurantShowNearby")}
           </button>
         )}
       </div>
 
-      {message && <p role="status">{message}</p>}
+      {messageKey && (
+        <p role="status">{t(messageKey)}</p>
+      )}
 
       {/* Restaurant cards */}
       {loading ? (
-        <p>Cargando restaurantes...</p>
+        <p>{t("restaurantLoading")}</p>
       ) : error ? (
-        <p>No se pudieron cargar los restaurantes.</p>
+        <p>{t("restaurantError")}</p>
       ) : visibleRestaurants.length === 0 ? (
-        <p>No se encontraron restaurantes.</p>
+        <p>{t("restaurantEmpty")}</p>
       ) : (
         visibleRestaurants.map((restaurant) => (
           <article
             className="restaurant-card"
             key={restaurant.id}
           >
+            <div className="restaurant-media">
+              {restaurant.imageUrl ? (
+                <img
+                  src={restaurant.imageUrl}
+                  alt={restaurant.name}
+                  loading="lazy"
+                />
+              ) : (
+                <span aria-hidden="true">
+                  {restaurant.category === "Japonesa"
+                    ? "🍣"
+                    : restaurant.category === "Hamburguesas"
+                    ? "🍔"
+                    : restaurant.category === "Italiana"
+                    ? "🍝"
+                    : "🍽️"}
+                </span>
+              )}
+            </div>
+
             <h3>{restaurant.name}</h3>
 
-            <p>{restaurant.category}</p>
-            <p>{restaurant.description}</p>
+            <p>{translateCategory(restaurant.category)}</p>
+
+            <p>{translateDescription(restaurant.description)}</p>
+
             <p>{restaurant.address}</p>
 
             <p>
-              Precio estimado:{" "}
+              {t("estimatedPrice")}:{" "}
               {restaurant.averagePrice.toLocaleString("es-CL", {
                 style: "currency",
                 currency: "CLP",
@@ -295,23 +413,28 @@ export default function RestaurantList() {
 
             {restaurant.distanceKm !== null && (
               <p>
-                Distancia aproximada:{" "}
+                {t("restaurantDistance")}:{" "}
                 {restaurant.distanceKm.toFixed(1)} km
               </p>
             )}
 
-            {/* Ratings */}
             <p>
               {restaurant.averageRating === null
-                ? "Sin calificaciones"
-                : `Calificación: ${restaurant.averageRating}/5 (${restaurant.ratingCount} usuarios)`}
+                ? t("restaurantNoRatings")
+                : `${t("restaurantRating")}: ${restaurant.averageRating}/5 (${restaurant.ratingCount} ${
+                  restaurant.ratingCount === 1
+                    ? t("restaurantRatingUser")
+                    : t("restaurantRatingUsers")
+                })`}
             </p>
 
+            {/* Rating selector */}
             <label>
-              Tu calificación:{" "}
+              {t("restaurantYourRating")}:
+
               <select
                 defaultValue=""
-                aria-label={`Calificar ${restaurant.name}`}
+                aria-label={`${t("restaurantYourRating")} ${restaurant.name}`}
                 onChange={(event) => {
                   void handleRating(
                     restaurant.id,
@@ -320,35 +443,83 @@ export default function RestaurantList() {
                 }}
               >
                 <option value="" disabled>
-                  Seleccionar
+                  {t("restaurantSelect")}
                 </option>
-                <option value="1">1 estrella</option>
-                <option value="2">2 estrellas</option>
-                <option value="3">3 estrellas</option>
-                <option value="4">4 estrellas</option>
-                <option value="5">5 estrellas</option>
+
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <option key={value} value={value}>
+                    {value}{" "}
+                    {value === 1
+                      ? t("restaurantStar")
+                      : t("restaurantStars")}
+                  </option>
+                ))}
               </select>
             </label>
 
-            {/* Google Maps button */}
+            {/* Google Maps */}
             <button
               type="button"
               onClick={() => setSelectedMapId(restaurant.id)}
             >
-              Ver ubicación en Google Maps
+              {t("restaurantMapButton")}
             </button>
+
+            {/* Share restaurant */}
+            <button
+              type="button"
+              className="share-restaurant-button"
+              onClick={() => void handleShareRestaurant(restaurant.id)}
+            >
+              {t("restaurantShareButton")}
+            </button>
+
+            {shareFeedback?.restaurantId === restaurant.id && (
+              <div className="share-feedback" role="status">
+                {shareFeedback.copied ? (
+                  <>
+                    <strong>{t("restaurantShareCopied")}</strong>
+                    <p>{t("restaurantShareCopiedHint")}</p>
+                  </>
+                ) : (
+                  <>
+                    <strong>{t("restaurantShareReady")}</strong>
+                    <p>{t("restaurantShareManual")}</p>
+
+                    <input
+                      type="text"
+                      readOnly
+                      value={shareFeedback.url}
+                      aria-label={t("restaurantShareReady")}
+                      onFocus={(event) =>
+                        event.currentTarget.select()}
+                    />
+                  </>
+                )}
+
+                <a
+                  href={shareFeedback.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {t("restaurantShareOpen")}
+                </a>
+              </div>
+            )}
           </article>
         ))
       )}
 
-      {/* Google Maps */}
+      {/* Restaurant map */}
       {selectedRestaurant && (
         <section className="restaurant-map">
-          <h3>Mapa de {selectedRestaurant.name}</h3>
+          <h3>
+            {t("restaurantMapTitle")} {selectedRestaurant.name}
+          </h3>
 
           {mapsKey ? (
             <iframe
-              title={`Mapa de ${selectedRestaurant.name}`}
+              title={`${t("restaurantMapTitle")} ${selectedRestaurant.name}`}
               src={`https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(mapsKey)}&q=${encodeURIComponent(mapQuery)}`}
               width="100%"
               height="300"
@@ -358,9 +529,7 @@ export default function RestaurantList() {
               allowFullScreen
             />
           ) : (
-            <p>
-              Falta configurar la clave de Google Maps.
-            </p>
+            <p>{t("restaurantMapMissing")}</p>
           )}
 
           <a
@@ -368,26 +537,30 @@ export default function RestaurantList() {
             target="_blank"
             rel="noopener noreferrer"
           >
-            Abrir en Google Maps
+            {t("restaurantMapOpen")}
           </a>
         </section>
       )}
 
       {/* Search history */}
       <section className="search-history">
-        <h3>Últimas búsquedas</h3>
+        <h3>{t("restaurantHistory")}</h3>
 
         {history.length === 0 ? (
-          <p>Aún no tienes búsquedas registradas.</p>
+          <p>{t("restaurantHistoryEmpty")}</p>
         ) : (
           <ul>
             {history.map((item) => (
               <li key={item.id}>
                 {[
-                  item.search && `Nombre: ${item.search}`,
-                  item.category && `Categoría: ${item.category}`,
+                  item.search &&
+                    `${t("restaurantHistoryName")}: ${item.search}`,
+                  item.category &&
+                    `${t("restaurantHistoryCategory")}: ${
+                      translateCategory(item.category)
+                    }`,
                   item.maxPrice !== null &&
-                    `Hasta $${item.maxPrice.toLocaleString("es-CL")}`,
+                    `${t("restaurantHistoryBudget")} $${item.maxPrice.toLocaleString("es-CL")}`,
                 ].filter(Boolean).join(" · ")}
               </li>
             ))}

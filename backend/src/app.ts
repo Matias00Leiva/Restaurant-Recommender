@@ -3,6 +3,8 @@ import { authRoutes } from "./routes/authRoutes.ts";
 import { env } from "./config/env.ts";
 import { restaurantRoutes } from "./routes/restaurantRoutes.ts";
 import { activityRoutes } from "./routes/activityRoutes.ts";
+import { userListRoutes } from "./routes/userListRoutes.ts";
+import { googleReviewRoutes } from "./routes/googleReviewRoutes.ts";
 
 export async function app(request: Request): Promise<Response> {
   let response: Response;
@@ -26,13 +28,17 @@ export async function app(request: Request): Promise<Response> {
 
     // Process authentication, activity, and restaurant routes.
     } else {
-      response = (await authRoutes(request)) ??
-        (await activityRoutes(request)) ??
-        restaurantRoutes(request) ??
-        Response.json(
-          { error: "not_found" },
-          { status: 404 },
-        );
+      
+response = (await authRoutes(request)) ??
+  (await activityRoutes(request)) ??
+  (await userListRoutes(request)) ??
+  (await googleReviewRoutes(request)) ??
+  restaurantRoutes(request) ??
+  Response.json(
+    { error: "not_found" },
+    { status: 404 },
+  );
+
     }
   } catch {
     console.error("Request failed.");
@@ -42,6 +48,8 @@ export async function app(request: Request): Promise<Response> {
       { status: 500 },
     );
   }
+
+  
 
   // Security and cache headers.
   response.headers.set("cache-control", "no-store");
