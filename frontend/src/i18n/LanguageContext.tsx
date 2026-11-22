@@ -159,6 +159,65 @@ googleReviewsReviewSource: "Ver reseña original",
 googleReviewsPolicy:
   "Las opiniones corresponden a usuarios de Google Maps, no a FoodieFind.",
 
+nearbyEyebrow: "RESTAURANTES REALES",
+nearbyTitle: "Restaurantes cerca de ti",
+
+nearbyDescription:
+  "Selecciona el radio de búsqueda para encontrar restaurantes cerca de tu ubicación.",
+nearbyRadius: "Radio de búsqueda",
+
+nearbyButton: "Buscar restaurantes cerca de mí",
+nearbyLocating: "Obteniendo ubicación...",
+nearbyLoading: "Buscando restaurantes...",
+nearbyUnsupported:
+  "Tu navegador no admite geolocalización.",
+nearbyGeoError:
+  "No se pudo obtener tu ubicación. Revisa los permisos.",
+nearbyFetchError:
+  "No se pudieron consultar los restaurantes.",
+nearbyNotConfigured:
+  "Google Places no está configurado en el servidor.",
+nearbyRateLimited:
+  "Ya hay una búsqueda en curso. Inténtalo nuevamente.",
+nearbyEmpty:
+  "No se encontraron restaurantes en esta zona.",
+nearbyResults: "Restaurantes encontrados",
+nearbyDistance: "Distancia aproximada",
+nearbyOpenMaps: "Abrir en Google Maps",
+nearbyAttribution: "Resultados proporcionados por",
+nearbyLimitations:
+  "Las calificaciones y listas siguen disponibles para los restaurantes de demostración.",
+
+
+nearbySortLabel: "Ordenar por",
+nearbySortDistance: "Más cercanos",
+nearbySortRating: "Mejor calificados",
+nearbySortReviews: "Más reseñados",
+nearbyRatings: "calificaciones",
+nearbyNoRatings: "Sin calificaciones de Google",
+nearbySaveError:
+  "No se pudieron cargar o actualizar los restaurantes guardados.",
+
+listsGoogleLoading:
+  "Cargando restaurantes reales guardados...",
+listsGoogleError:
+  "No se pudo obtener la información de los restaurantes de Google.",
+listsGoogleUnavailable:
+  "Restaurante de Google",
+listsGoogleSource:
+  "Información de Google Maps",
+listsDemoSource:
+  "Restaurante de demostración",
+listsShareDemo:
+  "Compartir restaurantes de demostración",
+listsGoogleShareNotice:
+  "Por ahora, los enlaces compartidos solo incluyen restaurantes de demostración.",
+
+  
+
+
+
+
 
 
 
@@ -312,6 +371,62 @@ googleReviewsOrder:
 googleReviewsReviewSource: "View original review",
 googleReviewsPolicy:
   "Reviews come from Google Maps users, not FoodieFind.",
+
+nearbyEyebrow: "REAL RESTAURANTS",
+nearbyTitle: "Restaurants near to you",
+
+nearbyDescription:
+  "Select a search radius to find restaurants near your location.",
+nearbyRadius: "Search radius",
+
+nearbyButton: "Find restaurants near me",
+nearbyLocating: "Getting your location...",
+nearbyLoading: "Searching for restaurants...",
+nearbyUnsupported:
+  "Your browser does not support geolocation.",
+nearbyGeoError:
+  "Could not get your location. Check your permissions.",
+nearbyFetchError:
+  "Could not retrieve nearby restaurants.",
+nearbyNotConfigured:
+  "Google Places is not configured on the server.",
+nearbyRateLimited:
+  "Another search is already in progress. Please try again.",
+nearbyEmpty:
+  "No restaurants were found in this area.",
+nearbyResults: "Restaurants found",
+nearbyDistance: "Approximate distance",
+nearbyOpenMaps: "Open in Google Maps",
+nearbyAttribution: "Results provided by",
+nearbyLimitations:
+  "Ratings and lists are still available for demonstration restaurants.",
+
+
+nearbySortLabel: "Sort by",
+nearbySortDistance: "Nearest",
+nearbySortRating: "Highest rated",
+nearbySortReviews: "Most reviewed",
+nearbyRatings: "ratings",
+nearbyNoRatings: "No Google ratings",
+nearbySaveError:
+  "Could not load or update saved restaurants.",
+
+
+listsGoogleLoading:
+  "Loading saved real restaurants...",
+listsGoogleError:
+  "Could not retrieve Google restaurant information.",
+listsGoogleUnavailable:
+  "Google restaurant",
+listsGoogleSource:
+  "Information from Google Maps",
+listsDemoSource:
+  "Demo restaurant",
+listsShareDemo:
+  "Share demo restaurants",
+listsGoogleShareNotice:
+  "For now, shared links only include demo restaurants.",
+
 
 
 

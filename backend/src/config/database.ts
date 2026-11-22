@@ -152,3 +152,28 @@ database.exec(`
   ON user_restaurant_lists(user_id, status);
 `);
 
+
+/*
+ * Store Google Place IDs associated with each user.
+ * Google Places content is not stored permanently.
+ */
+database.exec(`
+  CREATE TABLE IF NOT EXISTS google_restaurant_lists (
+    user_id TEXT NOT NULL
+      REFERENCES users(id) ON DELETE CASCADE,
+
+    place_id TEXT NOT NULL,
+
+    status TEXT NOT NULL
+      CHECK (status IN ('visited', 'to_visit')),
+
+    updated_at TEXT NOT NULL,
+
+    PRIMARY KEY (user_id, place_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_google_restaurant_lists
+  ON google_restaurant_lists(user_id, status);
+`);
+
+

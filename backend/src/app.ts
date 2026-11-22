@@ -6,6 +6,15 @@ import { activityRoutes } from "./routes/activityRoutes.ts";
 import { userListRoutes } from "./routes/userListRoutes.ts";
 import { googleReviewRoutes } from "./routes/googleReviewRoutes.ts";
 
+import { nearbyRestaurantRoutes } from "./routes/nearbyRestaurantRoutes.ts";
+
+import { googleListRoutes } from "./routes/googleListRoutes.ts";
+
+import { googleListDetailsRoutes } from "./routes/googleListDetailsRoutes.ts";
+
+
+
+
 export async function app(request: Request): Promise<Response> {
   let response: Response;
 
@@ -32,8 +41,12 @@ export async function app(request: Request): Promise<Response> {
 response = (await authRoutes(request)) ??
   (await activityRoutes(request)) ??
   (await userListRoutes(request)) ??
+  (await googleListDetailsRoutes(request)) ??
+  (await googleListRoutes(request)) ??
   (await googleReviewRoutes(request)) ??
+  (await nearbyRestaurantRoutes(request)) ??
   restaurantRoutes(request) ??
+
   Response.json(
     { error: "not_found" },
     { status: 404 },

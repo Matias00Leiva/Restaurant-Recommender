@@ -12,6 +12,9 @@ import MyListsSection from "../components/MyListsSection.tsx";
 import { useLanguage } from "../i18n/LanguageContext.tsx";
 import GoogleReviewsSection from "../components/GoogleReviewsSection.tsx";
 
+import NearbyRestaurantsSection from "../components/NearbyRestaurantsSection.tsx";
+
+
 interface User {
   id: string;
   email: string;
@@ -162,9 +165,11 @@ export default function Dashboard() {
 
             <p>{t("exploreDescription")}</p>
           </div>
-
+          
+          <NearbyRestaurantsSection />
           <RestaurantList />
           <GoogleReviewsSection />
+          
         </section>
       </main>
 

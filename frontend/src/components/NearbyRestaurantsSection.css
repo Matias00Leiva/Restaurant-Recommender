@@ -1,0 +1,267 @@
+
+.nearby-section {
+  padding: 24px;
+  margin-top: 30px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.nearby-section h2 {
+  margin: 10px 0;
+  color: var(--primary);
+  font-size: clamp(22px, 3vw, 28px);
+}
+
+.nearby-section > p {
+  color: #536159;
+  line-height: 1.55;
+}
+
+.nearby-search-button {
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+}
+
+.nearby-search-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.nearby-section .nearby-error {
+  color: #a04430;
+}
+
+.nearby-result-count {
+  font-weight: 700;
+}
+
+.nearby-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.nearby-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #faf8f4;
+}
+
+.nearby-card h3 {
+  margin: 0 0 10px;
+  color: var(--primary);
+}
+
+.nearby-card p {
+  color: #536159;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.nearby-card a {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 10px 13px;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.nearby-attribution {
+  margin-top: 20px;
+  font-size: 13px;
+}
+
+@media (max-width: 1050px) {
+  .nearby-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .nearby-section {
+    padding: 16px;
+  }
+
+  .nearby-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nearby-search-button {
+    width: 100%;
+  }
+}
+
+
+/* Search radius selector */
+.nearby-radius-control {
+  width: 100%;
+  max-width: 420px;
+  margin: 22px 0;
+}
+
+.nearby-radius-control label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.nearby-radius-control label strong {
+  color: var(--primary);
+  font-size: 18px;
+}
+
+.nearby-radius-control input[type="range"] {
+  display: block;
+  width: 100%;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.nearby-radius-control input[type="range"]:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.nearby-radius-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #68746b;
+}
+
+
+/* Quick radius selection */
+.nearby-radius-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 22px;
+}
+
+.nearby-radius-presets button {
+  padding: 9px 16px;
+  background: #f2f5f0;
+  color: #285b40;
+  border: 1px solid #cbd8cf;
+  border-radius: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.nearby-radius-presets button:hover {
+  background: #e4ece5;
+}
+
+.nearby-radius-presets button.active {
+  background: #285b40;
+  border-color: #285b40;
+  color: #fff;
+}
+
+.nearby-radius-presets button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* Restaurant sorting */
+.nearby-sort-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.nearby-sort-control label {
+  font-weight: 600;
+}
+
+.nearby-sort-control select {
+  min-width: 180px;
+  padding: 10px 14px;
+  background: #fff;
+  color: #285b40;
+  border: 1px solid #cbd8cf;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+@media (max-width: 480px) {
+  .nearby-radius-presets button {
+    flex: 1;
+    padding: 10px;
+  }
+
+  .nearby-sort-control {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .nearby-sort-control select {
+    width: 100%;
+  }
+}
+
+
+/* Saved Google restaurant actions */
+.nearby-save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.nearby-save-actions button {
+  padding: 9px 14px;
+  border: 1px solid #cbd8cf;
+  border-radius: 10px;
+  background: #f2f5f0;
+  color: #285b40;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nearby-save-actions button:hover {
+  background: #e4ece5;
+}
+
+.nearby-save-actions button.selected {
+  background: #285b40;
+  border-color: #285b40;
+  color: white;
+}
+
+.nearby-save-actions button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+@media (max-width: 480px) {
+  .nearby-save-actions {
+    flex-direction: column;
+  }
+
+  .nearby-save-actions button {
+    width: 100%;
+  }
+}
+

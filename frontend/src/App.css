@@ -952,3 +952,32 @@ select:focus-visible {
   background: #174d42;
   color: white;
 }
+
+
+/* Google restaurants in personal lists */
+.saved-google-link {
+  display: inline-block;
+  margin-top: 10px;
+  color: #285b40;
+  font-weight: 700;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
+.saved-google-link:hover {
+  color: #193d2b;
+}
+
+.saved-list-card li {
+  overflow-wrap: anywhere;
+}
+
+.saved-list-card .saved-list-actions {
+  margin-top: 12px;
+}
+
+.share-controls > p {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
