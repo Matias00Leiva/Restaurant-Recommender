@@ -177,3 +177,26 @@ database.exec(`
 `);
 
 
+/*
+ * Store personal ratings for Google restaurants.
+ * Ratings belong to FoodieFind users, not Google Maps.
+ */
+database.exec(`
+  CREATE TABLE IF NOT EXISTS google_restaurant_ratings (
+    user_id TEXT NOT NULL
+      REFERENCES users(id) ON DELETE CASCADE,
+
+    place_id TEXT NOT NULL,
+
+    rating INTEGER NOT NULL
+      CHECK (rating BETWEEN 1 AND 5),
+
+    updated_at TEXT NOT NULL,
+
+    PRIMARY KEY (user_id, place_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_google_ratings_user
+  ON google_restaurant_ratings(user_id);
+`);
+

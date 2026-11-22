@@ -1,19 +1,32 @@
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 
 import {
   getCurrentUser,
   logout,
-} from "../services/authService";
+} from "../services/authService.ts";
 
-import RestaurantList from "../components/RestaurantList.tsx";
-import RecommendationSection from "../components/RecommendationSection.tsx";
-import MyListsSection from "../components/MyListsSection.tsx";
-import { useLanguage } from "../i18n/LanguageContext.tsx";
-import GoogleReviewsSection from "../components/GoogleReviewsSection.tsx";
+import {
+  useLanguage,
+} from "../i18n/LanguageContext.tsx";
 
-import NearbyRestaurantsSection from "../components/NearbyRestaurantsSection.tsx";
+import RestaurantList from
+  "../components/RestaurantList.tsx";
 
+import NearbyRestaurantsSection from
+  "../components/NearbyRestaurantsSection.tsx";
+
+import RealRecommendationSection from
+  "../components/RealRecommendationSection.tsx";
+
+import MyListsSection from
+  "../components/MyListsSection.tsx";
+
+import GoogleReviewsSection from
+  "../components/GoogleReviewsSection.tsx";
 
 interface User {
   id: string;
@@ -26,10 +39,13 @@ interface User {
 export default function Dashboard() {
   const { t } = useLanguage();
 
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] =
+    useState<User | null>(null);
 
-  // Load the authenticated user.
+  const [loading, setLoading] =
+    useState(true);
+
+  // Retrieve the authenticated user.
   useEffect(() => {
     let active = true;
 
@@ -60,10 +76,11 @@ export default function Dashboard() {
     };
   }, []);
 
-  // Close the current session.
+  // End the current FoodieFind session.
   async function handleLogout() {
     try {
       await logout();
+
       window.location.replace("/");
     } catch {
       window.alert(t("logoutError"));
@@ -80,10 +97,16 @@ export default function Dashboard() {
 
   return (
     <div className="app-shell">
-      {/* Navigation */}
+      {/* Main navigation */}
       <header className="site-header">
-        <a className="brand" href="/dashboard">
-          <span className="brand-symbol">F</span>
+        <a
+          className="brand"
+          href="/dashboard"
+        >
+          <span className="brand-symbol">
+            F
+          </span>
+
           <span>FoodieFind</span>
         </a>
 
@@ -97,7 +120,9 @@ export default function Dashboard() {
               />
             ) : (
               <span className="profile-placeholder">
-                {user.name.charAt(0).toUpperCase()}
+                {user.name
+                  .charAt(0)
+                  .toUpperCase()}
               </span>
             )}
 
@@ -109,7 +134,9 @@ export default function Dashboard() {
           <button
             type="button"
             className="logout-button"
-            onClick={handleLogout}
+            onClick={() =>
+              void handleLogout()
+            }
           >
             {t("logout")}
           </button>
@@ -126,7 +153,9 @@ export default function Dashboard() {
 
             <h1>
               {t("heroTitle")}
-              <span>{t("heroHighlight")}</span>
+              <span>
+                {t("heroHighlight")}
+              </span>
             </h1>
 
             <p>{t("heroDescription")}</p>
@@ -147,13 +176,13 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Personalized recommendations */}
-        <RecommendationSection />
+        {/* Real personalized recommendations */}
+        <RealRecommendationSection />
 
-        {/* Personal restaurant lists */}
+        {/* Saved real restaurants and personal ratings */}
         <MyListsSection />
 
-        {/* Restaurant catalog */}
+        {/* Discover real restaurants */}
         <section
           className="explore-section"
           id="explorar"
@@ -163,17 +192,22 @@ export default function Dashboard() {
               {t("exploreEyebrow")}
             </span>
 
-            <p>{t("exploreDescription")}</p>
+            <p>
+              {t("exploreDescription")}
+            </p>
           </div>
-          
-          <NearbyRestaurantsSection />
+
+          {/* Main catalog with cuisine and budget filters */}
           <RestaurantList />
+
+          {/* Distance-based nearby discovery */}
+          <NearbyRestaurantsSection />
+
+          {/* Google reviews and rating analysis */}
           <GoogleReviewsSection />
-          
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="site-footer">
         FoodieFind · {t("footer")}
       </footer>

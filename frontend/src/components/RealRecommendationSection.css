@@ -1,0 +1,99 @@
+
+.real-recommendation-section {
+  margin: 32px 0;
+  padding: 24px;
+  border-radius: 20px;
+  background: #f4f8f4;
+}
+
+.real-rec-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.real-rec-controls label {
+  font-weight: 600;
+}
+
+.real-rec-controls select,
+.real-rec-controls button {
+  min-height: 42px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.real-rec-controls select {
+  border: 1px solid #cbd8cf;
+  background: white;
+  color: #24382d;
+}
+
+.real-rec-controls button {
+  border: 0;
+  background: #285b40;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.real-rec-controls button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.real-rec-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 240px), 1fr)
+  );
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.real-rec-card {
+  padding: 18px;
+  border: 1px solid #dbe5dc;
+  border-radius: 14px;
+  background: white;
+}
+
+.real-rec-card h3 {
+  margin: 12px 0;
+}
+
+.real-rec-card p {
+  margin: 8px 0;
+}
+
+.real-rec-card a {
+  display: inline-block;
+  margin-top: 8px;
+  font-weight: 700;
+  color: #285b40;
+}
+
+.real-rec-rank {
+  font-size: 13px;
+  font-weight: 700;
+  color: #285b40;
+}
+
+.real-rec-reason {
+  font-weight: 600;
+  color: #285b40;
+}
+
+.real-rec-error {
+  color: #a32626;
+}
+
+.real-rec-attribution {
+  margin-top: 18px;
+  font-size: 13px;
+  color: #53645a;
+}

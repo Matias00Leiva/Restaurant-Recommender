@@ -14,11 +14,23 @@ import {
   type GoogleListStatus,
 } from "../services/googleListService.ts";
 
+import {
+  getGoogleRatings,
+  saveGoogleRating,
+  GOOGLE_RATING_EVENT,
+  type GoogleUserRating,
+} from "../services/googleRatingService.ts";
+
 import { useLanguage } from "../i18n/LanguageContext.tsx";
 
 import "./NearbyRestaurantsSection.css";
 
-// Component status.
+// Number of restaurants displayed initially.
+const INITIAL_VISIBLE_COUNT = 6;
+
+// Number of additional restaurants shown per click.
+const LOAD_MORE_COUNT = 6;
+
 type Status =
   | "idle"
   | "locating"
@@ -26,26 +38,28 @@ type Status =
   | "ready"
   | "error";
 
-// Available sorting options.
-type SortOption = "distance" | "rating" | "reviews";
+type SortOption =
+  | "distance"
+  | "rating"
+  | "reviews";
 
-// Error translation keys.
 type ErrorKey =
   | "nearbyUnsupported"
   | "nearbyGeoError"
   | "nearbyFetchError"
   | "nearbyNotConfigured"
-  | "nearbyRateLimited";
+  | "nearbyRateLimited"
+  | "placesDailyQuota";
 
 export default function NearbyRestaurantsSection() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
-  // Search configuration.
+  // Search settings.
   const [radiusKm, setRadiusKm] = useState(20);
+
   const [sortBy, setSortBy] =
     useState<SortOption>("distance");
 
-  // Search results and request state.
   const [restaurants, setRestaurants] =
     useState<NearbyRestaurant[]>([]);
 
@@ -55,7 +69,12 @@ export default function NearbyRestaurantsSection() {
   const [errorKey, setErrorKey] =
     useState<ErrorKey | null>(null);
 
-  // Saved Google restaurants.
+  // Pagination state.
+  const [visibleCount, setVisibleCount] = useState(
+    INITIAL_VISIBLE_COUNT,
+  );
+
+  // Saved restaurants.
   const [savedGooglePlaces, setSavedGooglePlaces] =
     useState<GoogleListItem[]>([]);
 
@@ -68,63 +87,122 @@ export default function NearbyRestaurantsSection() {
   const [listError, setListError] =
     useState(false);
 
- 
-// Keep saved places synchronized across components.
-useEffect(() => {
-  let active = true;
+  // Personal restaurant ratings.
+  const [personalRatings, setPersonalRatings] =
+    useState<GoogleUserRating[]>([]);
 
-  function refreshSavedPlaces() {
-    getGoogleList()
-      .then((items) => {
-        if (!active) return;
+  const [ratingsLoading, setRatingsLoading] =
+    useState(true);
 
-        setSavedGooglePlaces(items);
-        setListError(false);
-      })
-      .catch(() => {
-        if (active) {
-          setListError(true);
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setListLoading(false);
-        }
-      });
-  }
+  const [ratingBusyId, setRatingBusyId] =
+    useState<string | null>(null);
 
-  refreshSavedPlaces();
+  const [ratingError, setRatingError] =
+    useState(false);
 
-  window.addEventListener(
-    GOOGLE_LIST_EVENT,
-    refreshSavedPlaces,
-  );
+  const [ratingMessage, setRatingMessage] =
+    useState(false);
 
-  return () => {
-    active = false;
+  // Synchronize saved restaurants across components.
+  useEffect(() => {
+    let active = true;
 
-    window.removeEventListener(
+    function refreshSavedPlaces() {
+      getGoogleList()
+        .then((items) => {
+          if (active) {
+            setSavedGooglePlaces(items);
+            setListError(false);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setListError(true);
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setListLoading(false);
+          }
+        });
+    }
+
+    refreshSavedPlaces();
+
+    window.addEventListener(
       GOOGLE_LIST_EVENT,
       refreshSavedPlaces,
     );
-  };
-}, []);
 
+    return () => {
+      active = false;
 
-  // Update the radius without making an API request.
+      window.removeEventListener(
+        GOOGLE_LIST_EVENT,
+        refreshSavedPlaces,
+      );
+    };
+  }, []);
+
+  // Synchronize personal ratings across components.
+  useEffect(() => {
+    let active = true;
+
+    function refreshRatings() {
+      getGoogleRatings()
+        .then((items) => {
+          if (active) {
+            setPersonalRatings(items);
+            setRatingError(false);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setRatingError(true);
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setRatingsLoading(false);
+          }
+        });
+    }
+
+    refreshRatings();
+
+    window.addEventListener(
+      GOOGLE_RATING_EVENT,
+      refreshRatings,
+    );
+
+    return () => {
+      active = false;
+
+      window.removeEventListener(
+        GOOGLE_RATING_EVENT,
+        refreshRatings,
+      );
+    };
+  }, []);
+
+  // Update the search radius and reset the results.
   function updateRadius(value: number) {
     setRadiusKm(value);
     setRestaurants([]);
-    setErrorKey(null);
     setStatus("idle");
+    setErrorKey(null);
+
+    // Reset pagination after changing the radius.
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
   }
 
-  // Request the user's location and search restaurants.
+  const searching =
+    status === "locating" ||
+    status === "loading";
+
+  // Request restaurants using the user's location.
   function findNearby() {
-    if (
-      status === "locating" ||
-      status === "loading"
-    ) {
+    if (searching) {
       return;
     }
 
@@ -138,18 +216,21 @@ useEffect(() => {
     setErrorKey(null);
     setStatus("locating");
 
+    // Every new search starts with six visible restaurants.
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
+
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         setStatus("loading");
 
         try {
-          const data = await getNearbyRestaurants(
+          const results = await getNearbyRestaurants(
             position.coords.latitude,
             position.coords.longitude,
             radiusKm,
           );
 
-          setRestaurants(data);
+          setRestaurants(results);
           setStatus("ready");
         } catch (error) {
           const message =
@@ -157,13 +238,15 @@ useEffect(() => {
               ? error.message
               : "";
 
-          if (message === "rate_limited") {
-            setErrorKey("nearbyRateLimited");
-          } else if (message === "not_configured") {
-            setErrorKey("nearbyNotConfigured");
-          } else {
-            setErrorKey("nearbyFetchError");
-          }
+          setErrorKey(
+            message === "daily_quota_exceeded"
+              ? "placesDailyQuota"
+              : message === "rate_limited"
+                ? "nearbyRateLimited"
+                : message === "not_configured"
+                  ? "nearbyNotConfigured"
+                  : "nearbyFetchError",
+          );
 
           setStatus("error");
         }
@@ -180,12 +263,15 @@ useEffect(() => {
     );
   }
 
-  // Save, update, or remove a Google restaurant.
+  // Save a real restaurant in SQLite.
   async function saveGoogleRestaurant(
     placeId: string,
     nextStatus: GoogleListStatus | null,
   ) {
-    if (busyPlaceId !== null || listLoading) {
+    if (
+      busyPlaceId !== null ||
+      listLoading
+    ) {
       return;
     }
 
@@ -195,23 +281,20 @@ useEffect(() => {
     try {
       await updateGoogleList(placeId, nextStatus);
 
-      // Update the interface after a successful request.
       setSavedGooglePlaces((previous) => {
         const remaining = previous.filter(
           (item) => item.placeId !== placeId,
         );
 
-        if (nextStatus === null) {
-          return remaining;
-        }
-
-        return [
-          ...remaining,
-          {
-            placeId,
-            status: nextStatus,
-          },
-        ];
+        return nextStatus === null
+          ? remaining
+          : [
+              ...remaining,
+              {
+                placeId,
+                status: nextStatus,
+              },
+            ];
       });
     } catch {
       setListError(true);
@@ -220,32 +303,104 @@ useEffect(() => {
     }
   }
 
-  // Sort restaurants without another API request.
-  const sortedRestaurants = [...restaurants].sort(
-    (a, b) => {
-      if (sortBy === "rating") {
-        return (
-          (b.rating ?? -1) - (a.rating ?? -1) ||
-          b.ratingCount - a.ratingCount ||
-          a.distanceKm - b.distanceKm
-        );
-      }
+  // Save a personal FoodieFind rating.
+  async function rateGoogleRestaurant(
+    placeId: string,
+    rating: number | null,
+  ) {
+    if (
+      ratingBusyId !== null ||
+      ratingsLoading
+    ) {
+      return;
+    }
 
-      if (sortBy === "reviews") {
-        return (
-          b.ratingCount - a.ratingCount ||
-          (b.rating ?? -1) - (a.rating ?? -1) ||
-          a.distanceKm - b.distanceKm
-        );
-      }
+    setRatingBusyId(placeId);
+    setRatingError(false);
+    setRatingMessage(false);
 
-      return a.distanceKm - b.distanceKm;
-    },
+    try {
+      await saveGoogleRating(placeId, rating);
+
+      setPersonalRatings((previous) => {
+        const remaining = previous.filter(
+          (item) => item.placeId !== placeId,
+        );
+
+        return rating === null
+          ? remaining
+          : [
+              ...remaining,
+              {
+                placeId,
+                rating,
+              },
+            ];
+      });
+
+      setRatingMessage(true);
+    } catch {
+      setRatingError(true);
+    } finally {
+      setRatingBusyId(null);
+    }
+  }
+
+  // Sort the restaurants locally.
+  const sortedRestaurants = [
+    ...restaurants,
+  ].sort((a, b) => {
+    if (sortBy === "rating") {
+      return (
+        (b.rating ?? -1) -
+          (a.rating ?? -1) ||
+        b.ratingCount - a.ratingCount ||
+        a.distanceKm - b.distanceKm
+      );
+    }
+
+    if (sortBy === "reviews") {
+      return (
+        b.ratingCount - a.ratingCount ||
+        (b.rating ?? -1) -
+          (a.rating ?? -1) ||
+        a.distanceKm - b.distanceKm
+      );
+    }
+
+    return a.distanceKm - b.distanceKm;
+  });
+
+  // Only render the currently visible restaurants.
+  const visibleRestaurants =
+    sortedRestaurants.slice(0, visibleCount);
+
+  // Check if there are more restaurants to display.
+  const hasMoreRestaurants =
+    visibleCount < sortedRestaurants.length;
+
+  const remainingRestaurants = Math.max(
+    0,
+    sortedRestaurants.length - visibleCount,
   );
 
-  const searching =
-    status === "locating" ||
-    status === "loading";
+  // Display more restaurants without calling Google Places.
+  function showMoreRestaurants() {
+    setVisibleCount((previous) =>
+      Math.min(
+        previous + LOAD_MORE_COUNT,
+        sortedRestaurants.length,
+      )
+    );
+  }
+
+  // Change sorting without requesting new restaurants.
+  function changeSorting(value: SortOption) {
+    setSortBy(value);
+
+    // Start from the first six results in the new order.
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
+  }
 
   return (
     <section
@@ -260,7 +415,7 @@ useEffect(() => {
 
       <p>{t("nearbyDescription")}</p>
 
-      {/* Search radius selector */}
+      {/* Search radius control */}
       <div className="nearby-radius-control">
         <label htmlFor="nearby-radius">
           <span>{t("nearbyRadius")}</span>
@@ -276,7 +431,9 @@ useEffect(() => {
           value={radiusKm}
           disabled={searching}
           onChange={(event) =>
-            updateRadius(Number(event.target.value))
+            updateRadius(
+              Number(event.target.value),
+            )
           }
         />
 
@@ -296,11 +453,15 @@ useEffect(() => {
             key={value}
             type="button"
             className={
-              radiusKm === value ? "active" : ""
+              radiusKm === value
+                ? "active"
+                : ""
             }
             aria-pressed={radiusKm === value}
             disabled={searching}
-            onClick={() => updateRadius(value)}
+            onClick={() =>
+              updateRadius(value)
+            }
           >
             {value} km
           </button>
@@ -321,7 +482,7 @@ useEffect(() => {
             : t("nearbyButton")}
       </button>
 
-      {/* Search errors */}
+      {/* Error messages */}
       {status === "error" && errorKey && (
         <p
           className="nearby-error"
@@ -331,7 +492,6 @@ useEffect(() => {
         </p>
       )}
 
-      {/* Saved list errors */}
       {listError && (
         <p
           className="nearby-error"
@@ -341,7 +501,22 @@ useEffect(() => {
         </p>
       )}
 
-      {/* Empty results */}
+      {ratingError && (
+        <p
+          className="nearby-error"
+          role="alert"
+        >
+          {t("personalRatingError")}
+        </p>
+      )}
+
+      {ratingMessage && !ratingError && (
+        <p role="status">
+          {t("personalRatingSaved")}
+        </p>
+      )}
+
+      {/* No restaurants found */}
       {status === "ready" &&
         restaurants.length === 0 && (
           <p role="status">
@@ -361,7 +536,7 @@ useEffect(() => {
               {restaurants.length}
             </p>
 
-            {/* Sorting options */}
+            {/* Sort restaurants */}
             <div className="nearby-sort-control">
               <label htmlFor="nearby-sort">
                 {t("nearbySortLabel")}
@@ -371,7 +546,7 @@ useEffect(() => {
                 id="nearby-sort"
                 value={sortBy}
                 onChange={(event) =>
-                  setSortBy(
+                  changeSorting(
                     event.target.value as SortOption,
                   )
                 }
@@ -390,14 +565,33 @@ useEffect(() => {
               </select>
             </div>
 
+            {/* Visible restaurant count */}
+            <p
+              className="nearby-visible-count"
+              role="status"
+              aria-live="polite"
+            >
+              {language === "es"
+                ? `Mostrando ${visibleRestaurants.length} de ${sortedRestaurants.length} restaurantes`
+                : `Showing ${visibleRestaurants.length} of ${sortedRestaurants.length} restaurants`}
+            </p>
+
             {/* Restaurant cards */}
             <div className="nearby-grid">
-              {sortedRestaurants.map((restaurant) => {
+              {visibleRestaurants.map((restaurant) => {
                 const savedStatus =
                   savedGooglePlaces.find(
                     (item) =>
-                      item.placeId === restaurant.placeId,
+                      item.placeId ===
+                        restaurant.placeId,
                   )?.status;
+
+                const personalRating =
+                  personalRatings.find(
+                    (item) =>
+                      item.placeId ===
+                        restaurant.placeId,
+                  )?.rating;
 
                 return (
                   <article
@@ -408,18 +602,61 @@ useEffect(() => {
 
                     <p>{restaurant.address}</p>
 
-                    {/* Distance */}
                     <p>
                       {t("nearbyDistance")}:{" "}
                       {restaurant.distanceKm.toFixed(1)} km
                     </p>
 
-                    {/* Google rating */}
+                    {/* Public Google rating */}
                     <p>
                       {restaurant.rating !== null
                         ? `${restaurant.rating.toFixed(1)} / 5 · ${restaurant.ratingCount} ${t("nearbyRatings")}`
                         : t("nearbyNoRatings")}
                     </p>
+
+                    {/* Personal rating */}
+                    <div className="nearby-personal-rating">
+                      <label
+                        htmlFor={`rating-${restaurant.placeId}`}
+                      >
+                        {t("personalRatingLabel")}
+                      </label>
+
+                      <select
+                        id={`rating-${restaurant.placeId}`}
+                        value={personalRating ?? ""}
+                        disabled={
+                          ratingsLoading ||
+                          ratingBusyId !== null
+                        }
+                        onChange={(event) => {
+                          const value =
+                            event.target.value;
+
+                          void rateGoogleRestaurant(
+                            restaurant.placeId,
+                            value === ""
+                              ? null
+                              : Number(value),
+                          );
+                        }}
+                      >
+                        <option value="">
+                          {t("personalRatingNone")}
+                        </option>
+
+                        {[1, 2, 3, 4, 5].map(
+                          (value) => (
+                            <option
+                              key={value}
+                              value={value}
+                            >
+                              {value} / 5
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
 
                     {/* Google Maps link */}
                     <a
@@ -430,7 +667,7 @@ useEffect(() => {
                       {t("nearbyOpenMaps")}
                     </a>
 
-                    {/* Saved restaurant actions */}
+                    {/* Save restaurant actions */}
                     <div className="nearby-save-actions">
                       <button
                         type="button"
@@ -502,6 +739,29 @@ useEffect(() => {
                 );
               })}
             </div>
+
+            {/* Show more restaurants */}
+            {hasMoreRestaurants && (
+              <div
+                className="nearby-show-more"
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  marginTop: "24px",
+                  marginBottom: "24px",
+                }}
+              >
+                <button
+                  type="button"
+                  className="nearby-search-button"
+                  onClick={showMoreRestaurants}
+                >
+                  {language === "es"
+                    ? `Ver más restaurantes (+${Math.min(LOAD_MORE_COUNT, remainingRestaurants)})`
+                    : `Show more restaurants (+${Math.min(LOAD_MORE_COUNT, remainingRestaurants)})`}
+                </button>
+              </div>
+            )}
 
             {/* Google attribution */}
             <p className="nearby-attribution">

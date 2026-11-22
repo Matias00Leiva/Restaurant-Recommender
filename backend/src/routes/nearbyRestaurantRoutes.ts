@@ -1,31 +1,38 @@
 
 import { env } from "../config/env.ts";
-import { requireAuth } from "../middleware/requireAuth.ts";
-import { searchNearbyRestaurants } from "../services/nearbyRestaurantService.ts";
 
+import {
+  requireAuth,
+} from "../middleware/requireAuth.ts";
 
+import {
+  searchNearbyRestaurants,
+} from "../services/nearbyRestaurantService.ts";
+
+// Prevent simultaneous searches from the same user.
 const searchesInProgress = new Set<string>();
 
-
-// Validate coordinates received from the frontend.
-export function parseCoordinates(request: Request) {
+// Validate geographic coordinates.
+export function parseCoordinates(
+  request: Request,
+): {
+  latitude: number;
+  longitude: number;
+} | null {
   const params = new URL(request.url).searchParams;
 
   const rawLatitude = params.get("latitude");
   const rawLongitude = params.get("longitude");
 
-  if (!rawLatitude?.trim() || !rawLongitude?.trim() ) {
-    
+  if (
+    !rawLatitude?.trim() ||
+    !rawLongitude?.trim()
+  ) {
     return null;
   }
 
   const latitude = Number(rawLatitude);
   const longitude = Number(rawLongitude);
-
-const radiusKm = Number(
-  params.get("radiusKm") ?? "20",
-);
-
 
   if (
     !Number.isFinite(latitude) ||
@@ -34,19 +41,38 @@ const radiusKm = Number(
     !Number.isFinite(longitude) ||
     longitude < -180 ||
     longitude > 180
-
-|| !Number.isInteger(radiusKm)
-|| radiusKm < 1
-|| radiusKm > 50
-
   ) {
     return null;
   }
 
-  return { latitude, longitude, radiusKm };
+  return { latitude, longitude };
 }
 
-// Handle nearby restaurant requests.
+// Validate the requested search radius.
+export function parseRadius(
+  request: Request,
+): number | null {
+  const raw = new URL(request.url)
+    .searchParams.get("radiusKm");
+
+  if (raw === null) {
+    return 20;
+  }
+
+  if (!raw.trim()) {
+    return null;
+  }
+
+  const radiusKm = Number(raw);
+
+  return (
+    Number.isInteger(radiusKm) &&
+    radiusKm >= 1 &&
+    radiusKm <= 50
+  ) ? radiusKm : null;
+}
+
+// Handle requests to the nearby restaurant endpoint.
 export async function nearbyRestaurantRoutes(
   request: Request,
 ): Promise<Response | null> {
@@ -63,60 +89,79 @@ export async function nearbyRestaurantRoutes(
     );
   }
 
-  return await requireAuth(request, async (user) => {
-    const coordinates = parseCoordinates(request);
+  return await requireAuth(
+    request,
+    async (user) => {
+      const coordinates = parseCoordinates(request);
 
-    if (!coordinates) {
-      return Response.json(
-        { error: "invalid_coordinates" },
-        { status: 400 },
-      );
-    }
+      if (!coordinates) {
+        return Response.json(
+          { error: "invalid_coordinates" },
+          { status: 400 },
+        );
+      }
 
-    if (!env.googlePlacesApiKey) {
-      return Response.json(
-        { error: "places_not_configured" },
-        { status: 503 },
-      );
-    }
+      const radiusKm = parseRadius(request);
 
-    
-   
-if (searchesInProgress.has(user.id)) {
-  return Response.json(
-    { error: "search_in_progress" },
-    { status: 429 },
+      if (radiusKm === null) {
+        return Response.json(
+          { error: "invalid_radius" },
+          { status: 400 },
+        );
+      }
+
+      if (!env.googlePlacesApiKey) {
+        return Response.json(
+          { error: "places_not_configured" },
+          { status: 503 },
+        );
+      }
+
+      if (searchesInProgress.has(user.id)) {
+        return Response.json(
+          { error: "rate_limited" },
+          { status: 429 },
+        );
+      }
+
+      searchesInProgress.add(user.id);
+
+      try {
+        const restaurants =
+          await searchNearbyRestaurants(
+            coordinates.latitude,
+            coordinates.longitude,
+            fetch,
+            env.googlePlacesApiKey,
+            radiusKm,
+          );
+
+        return Response.json({ restaurants });
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : String(error);
+
+        console.error(
+          "Nearby search failed:",
+          message,
+        );
+
+        if (message === "daily_quota_exceeded") {
+          return Response.json(
+            { error: "daily_quota_exceeded" },
+            { status: 429 },
+          );
+        }
+
+        return Response.json(
+          { error: "places_unavailable" },
+          { status: 502 },
+        );
+      } finally {
+        searchesInProgress.delete(user.id);
+      }
+    },
   );
-}
-
-
-    searchesInProgress.add(user.id);
-
-    try {
-      const restaurants = await searchNearbyRestaurants(
-        coordinates.latitude,
-        coordinates.longitude,
-        fetch,
-        env.googlePlacesApiKey,
-        coordinates.radiusKm, 
-      );
-
-     
-      return Response.json({ restaurants });
-    } catch (error) {
-      console.error(
-        "Nearby search failed:",
-        error instanceof Error
-          ? error.message
-          : "Unknown error",
-      );
-
-      return Response.json(
-        { error: "places_unavailable" },
-        { status: 502 },
-      );
-    } finally {
-      searchesInProgress.delete(user.id);
-    }
-  });
 }

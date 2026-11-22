@@ -1,43 +1,88 @@
 
-import { requireAuth } from "../middleware/requireAuth.ts";
-import { getGooglePlaceReviews } from "../services/googlePlacesService.ts";
+import {
+  requireAuth,
+} from "../middleware/requireAuth.ts";
 
-// Limit paid API calls during the local demonstration.
+import {
+  getGooglePlaceReviews,
+} from "../services/googlePlacesService.ts";
+
+// Avoid repeated paid Place Details requests.
 let lastRequestAt = 0;
-const COOLDOWN_MS = 120_000;
+
+const COOLDOWN_MS = 120000;
 
 export async function googleReviewRoutes(
   request: Request,
 ): Promise<Response | null> {
-  const path = new URL(request.url).pathname;
+  const url = new URL(request.url);
 
-  if (
-    request.method !== "GET" ||
-    path !== "/api/google-reviews"
-  ) {
+  if (url.pathname !== "/api/google-reviews") {
     return null;
   }
 
-  return await requireAuth(request, async () => {
-    if (Date.now() - lastRequestAt < COOLDOWN_MS) {
-      return Response.json(
-        { error: "rate_limited" },
-        { status: 429 },
-      );
-    }
+  if (request.method !== "GET") {
+    return Response.json(
+      { error: "method_not_allowed" },
+      { status: 405 },
+    );
+  }
 
-    lastRequestAt = Date.now();
+  return await requireAuth(
+    request,
+    async () => {
+      const placeId =
+        url.searchParams.get("placeId") ?? "";
 
-    try {
-      const result = await getGooglePlaceReviews();
-      return Response.json(result);
-    } catch (error) {
-      console.error("Google Places request failed:", error);
+      if (
+        !/^[A-Za-z0-9_-]{5,255}$/.test(placeId)
+      ) {
+        return Response.json(
+          { error: "invalid_place_id" },
+          { status: 400 },
+        );
+      }
 
-      return Response.json(
-        { error: "google_places_unavailable" },
-        { status: 502 },
-      );
-    }
-  });
+      if (
+        Date.now() - lastRequestAt <
+        COOLDOWN_MS
+      ) {
+        return Response.json(
+          { error: "rate_limited" },
+          { status: 429 },
+        );
+      }
+
+      lastRequestAt = Date.now();
+
+      try {
+        const result =
+          await getGooglePlaceReviews(placeId);
+
+        return Response.json(result);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : String(error);
+
+        console.error(
+          "Google reviews request failed:",
+          message,
+        );
+
+        if (message === "daily_quota_exceeded") {
+          return Response.json(
+            { error: "daily_quota_exceeded" },
+            { status: 429 },
+          );
+        }
+
+        return Response.json(
+          { error: "google_places_unavailable" },
+          { status: 502 },
+        );
+      }
+    },
+  );
 }

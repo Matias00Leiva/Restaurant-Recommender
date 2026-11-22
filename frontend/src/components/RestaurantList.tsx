@@ -1,202 +1,316 @@
+import { useUiText } from "../i18n/uiText.ts";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
 import {
-  getRestaurants,
-  type Restaurant,
-  type RestaurantFilters,
-} from "../services/restaurantService.ts";
+  getNearbyRestaurants,
+  type NearbyRestaurant,
+} from "../services/nearbyRestaurantService.ts";
 
 import {
-  getSearchHistory,
-  rateRestaurant,
+  getGoogleList,
+  updateGoogleList,
+  GOOGLE_LIST_EVENT,
+  type GoogleListItem,
+  type GoogleListStatus,
+} from "../services/googleListService.ts";
+
+import {
+  getGoogleRatings,
+  saveGoogleRating,
+  GOOGLE_RATING_EVENT,
+  type GoogleUserRating,
+} from "../services/googleRatingService.ts";
+
+import {
   saveSearchHistory,
-  type SearchHistoryItem,
 } from "../services/activityService.ts";
 
 import {
-  createRestaurantShareUrl,
-} from "../services/shareService.ts";
+  useLanguage,
+} from "../i18n/LanguageContext.tsx";
 
-import { useLanguage } from "../i18n/LanguageContext.tsx";
+const PAGE_SIZE = 6;
 
-interface Coordinates {
-  latitude: number;
-  longitude: number;
+type SearchStatus =
+  | "idle"
+  | "locating"
+  | "loading"
+  | "ready"
+  | "error";
+
+type SortOption =
+  | "distance"
+  | "rating"
+  | "reviews";
+
+type BudgetFilter =
+  | "all"
+  | "low"
+  | "medium"
+  | "high";
+
+type Cuisine =
+  | "japanese"
+  | "italian"
+  | "burgers"
+  | "pizza"
+  | "cafe"
+  | "other";
+
+// Classify restaurants using Google Places types.
+function getCuisine(types: string[] = []): Cuisine {
+  if (
+    types.some((type) =>
+      /japanese|sushi|ramen/.test(type)
+    )
+  ) {
+    return "japanese";
+  }
+
+  if (
+    types.some((type) =>
+      /italian/.test(type)
+    )
+  ) {
+    return "italian";
+  }
+
+  if (
+    types.some((type) =>
+      /hamburger|burger/.test(type)
+    )
+  ) {
+    return "burgers";
+  }
+
+  if (
+    types.some((type) =>
+      /pizza/.test(type)
+    )
+  ) {
+    return "pizza";
+  }
+
+  if (
+    types.some((type) =>
+      /cafe|coffee/.test(type)
+    )
+  ) {
+    return "cafe";
+  }
+
+  return "other";
 }
 
-type MessageKey =
-  | "restaurantHistoryError"
-  | "restaurantGeoLoading"
-  | "restaurantGeoSuccess"
-  | "restaurantGeoError"
-  | "restaurantGeoUnsupported"
-  | "restaurantRatingSaved"
-  | "restaurantRatingError";
+// Map Google's price level into budget categories.
+function getBudget(
+  priceLevel: string | null | undefined,
+): Exclude<BudgetFilter, "all"> | null {
+  switch (priceLevel) {
+    case "PRICE_LEVEL_FREE":
+    case "PRICE_LEVEL_INEXPENSIVE":
+      return "low";
 
-function calculateDistance(
-  first: Coordinates,
-  second: Coordinates,
-): number {
-  const toRadians = (value: number) => value * Math.PI / 180;
+    case "PRICE_LEVEL_MODERATE":
+      return "medium";
 
-  const latDifference = toRadians(second.latitude - first.latitude);
-  const lonDifference = toRadians(second.longitude - first.longitude);
+    case "PRICE_LEVEL_EXPENSIVE":
+    case "PRICE_LEVEL_VERY_EXPENSIVE":
+      return "high";
 
-  const a =
-    Math.sin(latDifference / 2) ** 2 +
-    Math.cos(toRadians(first.latitude)) *
-      Math.cos(toRadians(second.latitude)) *
-      Math.sin(lonDifference / 2) ** 2;
+    default:
+      return null;
+  }
+}
 
-  return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+// Preserve compatible cuisine labels in search history.
+function historyCategory(cuisine: string): string {
+  switch (cuisine) {
+    case "japanese":
+      return "Japonesa";
+    case "italian":
+      return "Italiana";
+    case "burgers":
+      return "Hamburguesas";
+    default:
+      return "";
+  }
 }
 
 export default function RestaurantList() {
-  const { t } = useLanguage();
+  const ui = useUiText();
+  const { t, language } = useLanguage();
 
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [history, setHistory] = useState<SearchHistoryItem[]>([]);
+  const [restaurants, setRestaurants] =
+    useState<NearbyRestaurant[]>([]);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [messageKey, setMessageKey] = useState<MessageKey | null>(null);
-
+  const [radiusKm, setRadiusKm] = useState(20);
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
+  const [cuisine, setCuisine] = useState("");
+  const [budget, setBudget] =
+    useState<BudgetFilter>("all");
 
-  const [filters, setFilters] = useState<RestaurantFilters>({});
+  const [appliedSearch, setAppliedSearch] =
+    useState("");
+  const [appliedCuisine, setAppliedCuisine] =
+    useState("");
+  const [appliedBudget, setAppliedBudget] =
+    useState<BudgetFilter>("all");
 
-  const [location, setLocation] = useState<Coordinates | null>(null);
-  const [nearbyOnly, setNearbyOnly] = useState(false);
-  const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
+  const [sortBy, setSortBy] =
+    useState<SortOption>("distance");
 
-  const [shareFeedback, setShareFeedback] = useState<{
-    restaurantId: string;
-    copied: boolean;
-    url: string;
-  } | null>(null);
+  const [visibleCount, setVisibleCount] =
+    useState(PAGE_SIZE);
 
-  const mapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const [status, setStatus] =
+    useState<SearchStatus>("idle");
 
-  // Load restaurants when filters change.
+  const [error, setError] = useState("");
+
+  const [savedPlaces, setSavedPlaces] =
+    useState<GoogleListItem[]>([]);
+
+  const [ratings, setRatings] =
+    useState<GoogleUserRating[]>([]);
+
+  const [listBusyId, setListBusyId] =
+    useState<string | null>(null);
+
+  const [ratingBusyId, setRatingBusyId] =
+    useState<string | null>(null);
+
+  const [actionError, setActionError] =
+    useState("");
+
+  const [copiedId, setCopiedId] =
+    useState<string | null>(null);
+
+  const searching =
+    status === "locating" ||
+    status === "loading";
+
+  // Load and synchronize the user's saved places.
   useEffect(() => {
     let active = true;
 
-    setLoading(true);
-    setError(false);
+    function refresh() {
+      getGoogleList()
+        .then((items) => {
+          if (active) setSavedPlaces(items);
+        })
+        .catch(() => {
+          if (active) {
+            setActionError(
+              ui("ui_could_not_load_your_lists_78c5ec1"),
+            );
+          }
+        });
+    }
 
-    getRestaurants(filters)
-      .then((data) => {
-        if (active) setRestaurants(data);
-      })
-      .catch(() => {
-        if (active) setError(true);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    refresh();
+
+    window.addEventListener(
+      GOOGLE_LIST_EVENT,
+      refresh,
+    );
 
     return () => {
       active = false;
+      window.removeEventListener(
+        GOOGLE_LIST_EVENT,
+        refresh,
+      );
     };
-  }, [filters]);
+  }, [language]);
 
-  // Load the user's recent searches.
+  // Load and synchronize personal ratings.
   useEffect(() => {
     let active = true;
 
-    getSearchHistory()
-      .then((data) => {
-        if (active) setHistory(data);
-      })
-      .catch(() => {
-        if (active) setHistory([]);
-      });
+    function refresh() {
+      getGoogleRatings()
+        .then((items) => {
+          if (active) setRatings(items);
+        })
+        .catch(() => {
+          if (active) {
+            setActionError(
+              t("personalRatingError"),
+            );
+          }
+        });
+    }
+
+    refresh();
+
+    window.addEventListener(
+      GOOGLE_RATING_EVENT,
+      refresh,
+    );
 
     return () => {
       active = false;
+      window.removeEventListener(
+        GOOGLE_RATING_EVENT,
+        refresh,
+      );
     };
-  }, []);
+  }, [language]);
 
-  // Translate a category without changing its database value.
-  function translateCategory(value: string): string {
-    switch (value) {
-      case "Japonesa":
-        return t("categoryJapanese");
-      case "Italiana":
-        return t("categoryItalian");
-      case "Hamburguesas":
-        return t("categoryBurgers");
-      default:
-        return value;
-    }
-  }
+  // Search Google Places only when requested by the user.
+  function findRestaurants() {
+    if (searching) return;
 
-  // Translate the descriptions of the demo restaurants.
-  function translateDescription(value: string): string {
-    switch (value) {
-      case "Restaurante especializado en hamburguesas.":
-        return t("descriptionBurgers");
-      case "Restaurante especializado en comida italiana.":
-        return t("descriptionItalian");
-      case "Restaurante especializado en sushi y comida japonesa.":
-        return t("descriptionJapanese");
-      default:
-        return value;
-    }
-  }
-
-  // Apply filters and save the search history.
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setMessageKey(null);
-
-    const nextFilters: RestaurantFilters = {
-      search: search.trim(),
-      category,
-      maxPrice: maxPrice === "" ? undefined : Number(maxPrice),
-    };
-
-    setFilters(nextFilters);
-
-    if (
-      nextFilters.search ||
-      nextFilters.category ||
-      nextFilters.maxPrice !== undefined
-    ) {
-      try {
-        await saveSearchHistory(nextFilters);
-        setHistory(await getSearchHistory());
-      } catch {
-        setMessageKey("restaurantHistoryError");
-      }
-    }
-  }
-
-  // Request permission to access the user's location.
-  function useMyLocation() {
     if (!navigator.geolocation) {
-      setMessageKey("restaurantGeoUnsupported");
+      setError(t("nearbyUnsupported"));
+      setStatus("error");
       return;
     }
 
-    setMessageKey("restaurantGeoLoading");
+    setRestaurants([]);
+    setError("");
+    setVisibleCount(PAGE_SIZE);
+    setStatus("locating");
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
+      async (position) => {
+        setStatus("loading");
 
-        setNearbyOnly(true);
-        setMessageKey("restaurantGeoSuccess");
+        try {
+          const results =
+            await getNearbyRestaurants(
+              position.coords.latitude,
+              position.coords.longitude,
+              radiusKm,
+            );
+
+          setRestaurants(results);
+          setStatus("ready");
+        } catch (cause) {
+          const message =
+            cause instanceof Error
+              ? cause.message
+              : "";
+
+          setError(
+            message === "daily_quota_exceeded"
+              ? t("placesDailyQuota")
+              : message === "rate_limited"
+                ? t("nearbyRateLimited")
+                : message === "not_configured"
+                  ? t("nearbyNotConfigured")
+                  : t("nearbyFetchError"),
+          );
+
+          setStatus("error");
+        }
       },
       () => {
-        setMessageKey("restaurantGeoError");
+        setError(t("nearbyGeoError"));
+        setStatus("error");
       },
       {
         enableHighAccuracy: false,
@@ -206,121 +320,322 @@ export default function RestaurantList() {
     );
   }
 
-  // Save a restaurant rating.
-  async function handleRating(
-    restaurantId: string,
-    rating: number,
+  // Apply filters locally; Google is not contacted.
+  function applyFilters(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    setAppliedSearch(search.trim());
+    setAppliedCuisine(cuisine);
+    setAppliedBudget(budget);
+    setVisibleCount(PAGE_SIZE);
+
+    // Keep search history for personalized recommendations.
+    if (search.trim() || cuisine) {
+      void saveSearchHistory({
+        search: search.trim(),
+        category: historyCategory(cuisine),
+      }).catch(() => {
+        console.warn(
+          "Could not save restaurant search history.",
+        );
+      });
+    }
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setCuisine("");
+    setBudget("all");
+    setAppliedSearch("");
+    setAppliedCuisine("");
+    setAppliedBudget("all");
+    setVisibleCount(PAGE_SIZE);
+    setSortBy("distance");
+  }
+
+  // Save real restaurants in SQLite.
+  async function changeList(
+    placeId: string,
+    nextStatus: GoogleListStatus | null,
+  ) {
+    if (listBusyId !== null) return;
+
+    setListBusyId(placeId);
+    setActionError("");
+
+    try {
+      await updateGoogleList(placeId, nextStatus);
+
+      setSavedPlaces((previous) => [
+        ...previous.filter(
+          (item) => item.placeId !== placeId,
+        ),
+        ...(nextStatus === null
+          ? []
+          : [{ placeId, status: nextStatus }]),
+      ]);
+    } catch {
+      setActionError(
+        t("listsUpdateError"),
+      );
+    } finally {
+      setListBusyId(null);
+    }
+  }
+
+  // Save a personal rating, separate from Google ratings.
+  async function changeRating(
+    placeId: string,
+    rating: number | null,
+  ) {
+    if (ratingBusyId !== null) return;
+
+    setRatingBusyId(placeId);
+    setActionError("");
+
+    try {
+      await saveGoogleRating(placeId, rating);
+
+      setRatings((previous) => [
+        ...previous.filter(
+          (item) => item.placeId !== placeId,
+        ),
+        ...(rating === null
+          ? []
+          : [{ placeId, rating }]),
+      ]);
+    } catch {
+      setActionError(
+        t("personalRatingError"),
+      );
+    } finally {
+      setRatingBusyId(null);
+    }
+  }
+
+  // Select this restaurant in the Google Reviews section.
+  function inspectReviews(
+    restaurant: NearbyRestaurant,
+  ) {
+    window.dispatchEvent(
+      new CustomEvent(
+        "foodiefind:review-place",
+        {
+          detail: {
+            placeId: restaurant.placeId,
+            name: restaurant.name,
+          },
+        },
+      ),
+    );
+
+    document
+      .getElementById("google-reviews")
+      ?.scrollIntoView({
+        behavior: "smooth",
+      });
+  }
+
+  async function shareRestaurant(
+    restaurant: NearbyRestaurant,
   ) {
     try {
-      await rateRestaurant(restaurantId, rating);
-      setRestaurants(await getRestaurants(filters));
-      setMessageKey("restaurantRatingSaved");
+      await navigator.clipboard.writeText(
+        restaurant.mapsUrl,
+      );
+
+      setCopiedId(restaurant.placeId);
     } catch {
-      setMessageKey("restaurantRatingError");
+      setActionError(
+        ui("ui_could_not_copy_the_link_you_can_ope_39d31f8"),
+      );
     }
   }
 
-  // Copy a shareable restaurant link.
-  async function handleShareRestaurant(restaurantId: string) {
-    const link = createRestaurantShareUrl(restaurantId);
+  const filteredRestaurants = useMemo(() => {
+    const query = appliedSearch.toLocaleLowerCase();
 
-    try {
-      await navigator.clipboard.writeText(link);
+    const result = restaurants.filter((restaurant) => {
+      const matchesName =
+        !query ||
+        restaurant.name
+          .toLocaleLowerCase()
+          .includes(query) ||
+        restaurant.address
+          .toLocaleLowerCase()
+          .includes(query);
 
-      setShareFeedback({
-        restaurantId,
-        copied: true,
-        url: link,
-      });
-    } catch {
-      setShareFeedback({
-        restaurantId,
-        copied: false,
-        url: link,
-      });
-    }
-  }
+      const matchesCuisine =
+        !appliedCuisine ||
+        getCuisine(restaurant.types) ===
+          appliedCuisine;
 
-  const visibleRestaurants = restaurants
-    .map((restaurant) => ({
-      ...restaurant,
-      distanceKm: location
-        ? calculateDistance(location, restaurant)
-        : null,
-    }))
-    .filter(
-      (restaurant) =>
-        !nearbyOnly ||
-        (restaurant.distanceKm !== null && restaurant.distanceKm <= 20),
-    )
-    .sort((a, b) => {
-      if (location) {
-        return (a.distanceKm ?? Infinity) -
-          (b.distanceKm ?? Infinity);
-      }
+      // Unknown prices are excluded only when filtering.
+      const matchesBudget =
+        appliedBudget === "all" ||
+        getBudget(restaurant.priceLevel) ===
+          appliedBudget;
 
-      return a.name.localeCompare(b.name);
+      return (
+        matchesName &&
+        matchesCuisine &&
+        matchesBudget
+      );
     });
 
-  const selectedRestaurant = restaurants.find(
-    (restaurant) => restaurant.id === selectedMapId,
-  );
+    result.sort((a, b) => {
+      if (sortBy === "rating") {
+        return (
+          (b.rating ?? -1) -
+            (a.rating ?? -1) ||
+          b.ratingCount - a.ratingCount
+        );
+      }
 
-  const mapQuery = selectedRestaurant
-    ? `${selectedRestaurant.latitude},${selectedRestaurant.longitude}`
-    : "";
+      if (sortBy === "reviews") {
+        return (
+          b.ratingCount - a.ratingCount ||
+          (b.rating ?? -1) -
+            (a.rating ?? -1)
+        );
+      }
 
-  const googleMapsUrl =
-    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
+      return a.distanceKm - b.distanceKm;
+    });
+
+    return result;
+  }, [
+    restaurants,
+    appliedSearch,
+    appliedCuisine,
+    appliedBudget,
+    sortBy,
+  ]);
+
+  const visibleRestaurants =
+    filteredRestaurants.slice(0, visibleCount);
+
+  const hasMore =
+    visibleCount < filteredRestaurants.length;
+
+  const cuisineLabel = (types: string[] = []) => {
+    switch (getCuisine(types)) {
+      case "japanese":
+        return t("categoryJapanese");
+      case "italian":
+        return t("categoryItalian");
+      case "burgers":
+        return t("categoryBurgers");
+      case "pizza":
+        return "Pizza";
+      case "cafe":
+        return ui("ui_cafe_0d5f2e7");
+      default:
+        return ui("ui_restaurant_1212ea9");
+    }
+  };
+
+  const budgetLabel = (
+    priceLevel: string | null | undefined,
+  ) => {
+    const value = getBudget(priceLevel);
+
+    if (value === "low") {
+      return ui("ui_inexpensive_7c17332");
+    }
+
+    if (value === "medium") {
+      return ui("ui_moderate_5c42afc");
+    }
+
+    if (value === "high") {
+      return ui("ui_expensive_7c6d115");
+    }
+
+    return ui("ui_price_unavailable_6a9e657");
+  };
 
   return (
-    <section className="restaurant-list">
-      <h2>{t("restaurantsTitle")}</h2>
+    <section
+      className="restaurant-list"
+      id="catalogo-real"
+    >
+      <h2>
+        {ui("ui_explore_new_flavors_9ac91f0")}
+      </h2>
 
-      {/* Search filters */}
+      <p>
+        {ui("ui_find_restaurants_near_you_discover__9eac3a9")}
+      </p>
+
+      {/* Local restaurant filters */}
       <form
         className="restaurant-filters"
-        onSubmit={handleSubmit}
+        onSubmit={applyFilters}
       >
         <input
-          type="text"
+          type="search"
+          value={search}
           placeholder={t("restaurantSearch")}
           aria-label={t("restaurantSearch")}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) =>
+            setSearch(event.target.value)
+          }
         />
 
         <select
-          aria-label={t("restaurantHistoryCategory")}
-          value={category}
-          onChange={(event) => setCategory(event.target.value)}
+          aria-label={t("restaurantAllCategories")}
+          value={cuisine}
+          onChange={(event) =>
+            setCuisine(event.target.value)
+          }
         >
           <option value="">
             {t("restaurantAllCategories")}
           </option>
-
-          <option value="Japonesa">
+          <option value="japanese">
             {t("categoryJapanese")}
           </option>
-
-          <option value="Hamburguesas">
+          <option value="italian">
+            {t("categoryItalian")}
+          </option>
+          <option value="burgers">
             {t("categoryBurgers")}
           </option>
-
-          <option value="Italiana">
-            {t("categoryItalian")}
+          <option value="pizza">Pizza</option>
+          <option value="cafe">
+            {ui("ui_cafe_0d5f2e7")}
+          </option>
+          <option value="other">
+            {ui("ui_other_f97e9da")}
           </option>
         </select>
 
-        <input
-          type="number"
-          min="0"
-          step="1"
-          placeholder={t("restaurantMaxPrice")}
-          aria-label={t("restaurantMaxPrice")}
-          value={maxPrice}
-          onChange={(event) => setMaxPrice(event.target.value)}
-        />
+        {/* Budget filter based on Google's price levels */}
+        <select
+          aria-label={ui("ui_budget_1c6225e")}
+          value={budget}
+          onChange={(event) =>
+            setBudget(
+              event.target.value as BudgetFilter,
+            )
+          }
+        >
+          <option value="all">
+            {ui("ui_all_budgets_edaa7af")}
+          </option>
+          <option value="low">
+            {ui("ui_inexpensive_7c17332")}
+          </option>
+          <option value="medium">
+            {ui("ui_moderate_5c42afc")}
+          </option>
+          <option value="high">
+            {ui("ui_expensive_7c6d115")}
+          </option>
+        </select>
 
         <button type="submit">
           {t("restaurantApplyFilters")}
@@ -328,245 +643,351 @@ export default function RestaurantList() {
 
         <button
           type="button"
-          onClick={() => {
-            setSearch("");
-            setCategory("");
-            setMaxPrice("");
-            setFilters({});
-          }}
+          onClick={clearFilters}
         >
           {t("restaurantClearFilters")}
         </button>
       </form>
 
-      {/* Geolocation controls */}
-      <div className="location-controls">
-        <button type="button" onClick={useMyLocation}>
-          {t("restaurantNearby")}
-        </button>
+      {/* Search distance */}
+      <div
+        className="location-controls"
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: "12px",
+          margin: "18px 0",
+        }}
+      >
+        <label htmlFor="restaurant-radius">
+          {t("nearbyRadius")}
+        </label>
 
-        {location && (
-          <button
-            type="button"
-            onClick={() => setNearbyOnly(!nearbyOnly)}
-          >
-            {nearbyOnly
-              ? t("restaurantShowAll")
-              : t("restaurantShowNearby")}
-          </button>
-        )}
+        <select
+          id="restaurant-radius"
+          value={radiusKm}
+          disabled={searching}
+          onChange={(event) => {
+            setRadiusKm(
+              Number(event.target.value),
+            );
+            setRestaurants([]);
+            setVisibleCount(PAGE_SIZE);
+            setStatus("idle");
+          }}
+        >
+          {[3, 10, 20, 50].map((radius) => (
+            <option key={radius} value={radius}>
+              {radius} km
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          disabled={searching}
+          onClick={findRestaurants}
+        >
+          {status === "locating"
+            ? t("nearbyLocating")
+            : status === "loading"
+              ? t("nearbyLoading")
+              : ui("ui_find_restaurants_6b9bea9")}
+        </button>
       </div>
 
-      {messageKey && (
-        <p role="status">{t(messageKey)}</p>
+      {status === "idle" && (
+        <p>
+          {ui("ui_choose_a_search_radius_to_discover__0a71e49")}
+        </p>
       )}
 
-      {/* Restaurant cards */}
-      {loading ? (
-        <p>{t("restaurantLoading")}</p>
-      ) : error ? (
-        <p>{t("restaurantError")}</p>
-      ) : visibleRestaurants.length === 0 ? (
-        <p>{t("restaurantEmpty")}</p>
-      ) : (
-        visibleRestaurants.map((restaurant) => (
-          <article
-            className="restaurant-card"
-            key={restaurant.id}
-          >
-            <div className="restaurant-media">
-              {restaurant.imageUrl ? (
-                <img
-                  src={restaurant.imageUrl}
-                  alt={restaurant.name}
-                  loading="lazy"
-                />
-              ) : (
-                <span aria-hidden="true">
-                  {restaurant.category === "Japonesa"
-                    ? "🍣"
-                    : restaurant.category === "Hamburguesas"
-                    ? "🍔"
-                    : restaurant.category === "Italiana"
-                    ? "🍝"
-                    : "🍽️"}
-                </span>
-              )}
+      {status === "error" && (
+        <p role="alert">{error}</p>
+      )}
+
+      {actionError && (
+        <p role="alert">{actionError}</p>
+      )}
+
+      {status === "ready" &&
+        filteredRestaurants.length === 0 && (
+          <p role="status">
+            {t("restaurantEmpty")}
+          </p>
+        )}
+
+      {status === "ready" &&
+        filteredRestaurants.length > 0 && (
+          <>
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+              }}
+            >
+              <p role="status">
+                {ui("ui_showing_of_restaurants_ae39abe", { v0: visibleRestaurants.length, v1: filteredRestaurants.length })}
+              </p>
+
+              <label>
+                {t("nearbySortLabel")}{" "}
+                <select
+                  value={sortBy}
+                  onChange={(event) => {
+                    setSortBy(
+                      event.target.value as SortOption,
+                    );
+                    setVisibleCount(PAGE_SIZE);
+                  }}
+                >
+                  <option value="distance">
+                    {t("nearbySortDistance")}
+                  </option>
+                  <option value="rating">
+                    {t("nearbySortRating")}
+                  </option>
+                  <option value="reviews">
+                    {t("nearbySortReviews")}
+                  </option>
+                </select>
+              </label>
             </div>
 
-            <h3>{restaurant.name}</h3>
+            {visibleRestaurants.map((restaurant) => {
+              const savedStatus =
+                savedPlaces.find(
+                  (item) =>
+                    item.placeId ===
+                      restaurant.placeId,
+                )?.status;
 
-            <p>{translateCategory(restaurant.category)}</p>
+              const personalRating =
+                ratings.find(
+                  (item) =>
+                    item.placeId ===
+                      restaurant.placeId,
+                )?.rating;
 
-            <p>{translateDescription(restaurant.description)}</p>
+              return (
+                <article
+                  className="restaurant-card"
+                  key={restaurant.placeId}
+                >
+                  <div
+                    className="restaurant-media"
+                    aria-hidden="true"
+                  >
+                    <span>
+                      {getCuisine(restaurant.types) ===
+                          "japanese"
+                        ? "🍣"
+                        : getCuisine(restaurant.types) ===
+                            "burgers"
+                          ? "🍔"
+                          : "🍽️"}
+                    </span>
+                  </div>
 
-            <p>{restaurant.address}</p>
+                  <h3>{restaurant.name}</h3>
+                  <p>
+                    {cuisineLabel(restaurant.types)}
+                  </p>
+                  <p>{restaurant.address}</p>
 
-            <p>
-              {t("estimatedPrice")}:{" "}
-              {restaurant.averagePrice.toLocaleString("es-CL", {
-                style: "currency",
-                currency: "CLP",
-                maximumFractionDigits: 0,
-              })}
-            </p>
+                  <p>
+                    {t("nearbyDistance")}:{" "}
+                    {restaurant.distanceKm.toFixed(1)} km
+                  </p>
 
-            {restaurant.distanceKm !== null && (
-              <p>
-                {t("restaurantDistance")}:{" "}
-                {restaurant.distanceKm.toFixed(1)} km
-              </p>
-            )}
+                  <p>
+                    {ui("ui_price_level_5a7c378")}:{" "}
+                    {budgetLabel(
+                      restaurant.priceLevel,
+                    )}
+                  </p>
 
-            <p>
-              {restaurant.averageRating === null
-                ? t("restaurantNoRatings")
-                : `${t("restaurantRating")}: ${restaurant.averageRating}/5 (${restaurant.ratingCount} ${
-                  restaurant.ratingCount === 1
-                    ? t("restaurantRatingUser")
-                    : t("restaurantRatingUsers")
-                })`}
-            </p>
+                  <p>
+                    {restaurant.rating === null
+                      ? t("nearbyNoRatings")
+                      : `Google: ${restaurant.rating.toFixed(1)}/5 (${restaurant.ratingCount})`}
+                  </p>
 
-            {/* Rating selector */}
-            <label>
-              {t("restaurantYourRating")}:
+                  {/* FoodieFind personal rating */}
+                  <label>
+                    <strong>
+                      {t("personalRatingLabel")}
+                    </strong>
 
-              <select
-                defaultValue=""
-                aria-label={`${t("restaurantYourRating")} ${restaurant.name}`}
-                onChange={(event) => {
-                  void handleRating(
-                    restaurant.id,
-                    Number(event.target.value),
-                  );
+                    <select
+                      value={personalRating ?? ""}
+                      disabled={ratingBusyId !== null}
+                      onChange={(event) => {
+                        const value =
+                          event.target.value;
+
+                        void changeRating(
+                          restaurant.placeId,
+                          value === ""
+                            ? null
+                            : Number(value),
+                        );
+                      }}
+                    >
+                      <option value="">
+                        {t("personalRatingNone")}
+                      </option>
+
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <option
+                          key={value}
+                          value={value}
+                        >
+                          {value} / 5
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px",
+                      marginTop: "14px",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      disabled={listBusyId !== null}
+                      aria-pressed={
+                        savedStatus === "to_visit"
+                      }
+                      onClick={() =>
+                        void changeList(
+                          restaurant.placeId,
+                          "to_visit",
+                        )
+                      }
+                    >
+                      {t("listsToVisit")}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={listBusyId !== null}
+                      aria-pressed={
+                        savedStatus === "visited"
+                      }
+                      onClick={() =>
+                        void changeList(
+                          restaurant.placeId,
+                          "visited",
+                        )
+                      }
+                    >
+                      {t("listsVisitedAction")}
+                    </button>
+
+                    {savedStatus && (
+                      <button
+                        type="button"
+                        disabled={listBusyId !== null}
+                        onClick={() =>
+                          void changeList(
+                            restaurant.placeId,
+                            null,
+                          )
+                        }
+                      >
+                        {t("listsRemove")}
+                      </button>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px",
+                      marginTop: "12px",
+                    }}
+                  >
+                    <a
+                      href={restaurant.mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {t("restaurantMapOpen")}
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        inspectReviews(restaurant)
+                      }
+                    >
+                      {ui("ui_analyze_reviews_a2612ff")}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void shareRestaurant(restaurant)
+                      }
+                    >
+                      {t("restaurantShareButton")}
+                    </button>
+                  </div>
+
+                  {copiedId === restaurant.placeId && (
+                    <p role="status">
+                      {t("restaurantShareCopied")}
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+
+            {hasMore && (
+              <div
+                style={{
+                  gridColumn: "1 / -1",
+                  display: "flex",
+                  justifyContent: "center",
+                  margin: "20px 0",
                 }}
               >
-                <option value="" disabled>
-                  {t("restaurantSelect")}
-                </option>
-
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <option key={value} value={value}>
-                    {value}{" "}
-                    {value === 1
-                      ? t("restaurantStar")
-                      : t("restaurantStars")}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {/* Google Maps */}
-            <button
-              type="button"
-              onClick={() => setSelectedMapId(restaurant.id)}
-            >
-              {t("restaurantMapButton")}
-            </button>
-
-            {/* Share restaurant */}
-            <button
-              type="button"
-              className="share-restaurant-button"
-              onClick={() => void handleShareRestaurant(restaurant.id)}
-            >
-              {t("restaurantShareButton")}
-            </button>
-
-            {shareFeedback?.restaurantId === restaurant.id && (
-              <div className="share-feedback" role="status">
-                {shareFeedback.copied ? (
-                  <>
-                    <strong>{t("restaurantShareCopied")}</strong>
-                    <p>{t("restaurantShareCopiedHint")}</p>
-                  </>
-                ) : (
-                  <>
-                    <strong>{t("restaurantShareReady")}</strong>
-                    <p>{t("restaurantShareManual")}</p>
-
-                    <input
-                      type="text"
-                      readOnly
-                      value={shareFeedback.url}
-                      aria-label={t("restaurantShareReady")}
-                      onFocus={(event) =>
-                        event.currentTarget.select()}
-                    />
-                  </>
-                )}
-
-                <a
-                  href={shareFeedback.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVisibleCount((previous) =>
+                      Math.min(
+                        previous + PAGE_SIZE,
+                        filteredRestaurants.length,
+                      )
+                    )
+                  }
                 >
-                  {t("restaurantShareOpen")}
-                </a>
+                  {ui("ui_show_more_restaurants_60dd54f")}
+                </button>
               </div>
             )}
-          </article>
-        ))
-      )}
 
-      {/* Restaurant map */}
-      {selectedRestaurant && (
-        <section className="restaurant-map">
-          <h3>
-            {t("restaurantMapTitle")} {selectedRestaurant.name}
-          </h3>
-
-          {mapsKey ? (
-            <iframe
-              title={`${t("restaurantMapTitle")} ${selectedRestaurant.name}`}
-              src={`https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(mapsKey)}&q=${encodeURIComponent(mapQuery)}`}
-              width="100%"
-              height="300"
-              style={{ border: 0 }}
-              referrerPolicy="strict-origin-when-cross-origin"
-              loading="lazy"
-              allowFullScreen
-            />
-          ) : (
-            <p>{t("restaurantMapMissing")}</p>
-          )}
-
-          <a
-            href={googleMapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {t("restaurantMapOpen")}
-          </a>
-        </section>
-      )}
-
-      {/* Search history */}
-      <section className="search-history">
-        <h3>{t("restaurantHistory")}</h3>
-
-        {history.length === 0 ? (
-          <p>{t("restaurantHistoryEmpty")}</p>
-        ) : (
-          <ul>
-            {history.map((item) => (
-              <li key={item.id}>
-                {[
-                  item.search &&
-                    `${t("restaurantHistoryName")}: ${item.search}`,
-                  item.category &&
-                    `${t("restaurantHistoryCategory")}: ${
-                      translateCategory(item.category)
-                    }`,
-                  item.maxPrice !== null &&
-                    `${t("restaurantHistoryBudget")} $${item.maxPrice.toLocaleString("es-CL")}`,
-                ].filter(Boolean).join(" · ")}
-              </li>
-            ))}
-          </ul>
+            <p
+              style={{
+                gridColumn: "1 / -1",
+              }}
+            >
+              {t("nearbyAttribution")} Google Maps.
+            </p>
+          </>
         )}
-      </section>
     </section>
   );
 }

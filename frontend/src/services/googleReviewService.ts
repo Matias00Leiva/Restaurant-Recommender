@@ -1,4 +1,8 @@
 
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  window.location.origin;
+
 export interface GoogleReview {
   rating: number | null;
   text: string;
@@ -7,6 +11,7 @@ export interface GoogleReview {
   authorPhoto: string | null;
   mapsUrl: string | null;
   published: string;
+  publishedAt: string | null;
 }
 
 export interface GooglePlaceReviews {
@@ -18,20 +23,36 @@ export interface GooglePlaceReviews {
   reviews: GoogleReview[];
 }
 
-export async function getGoogleReviews(): Promise<GooglePlaceReviews> {
-  const response = await fetch(
-    "http://localhost:8000/api/google-reviews",
-    {
-      credentials: "include",
-      cache: "no-store",
-    },
+// Retrieve reviews for a specific restaurant.
+export async function getGoogleReviews(
+  placeId: string,
+): Promise<GooglePlaceReviews> {
+  const url = new URL(
+    "/api/google-reviews",
+    API_URL,
   );
 
-  if (response.status === 429) {
-    throw new Error("rate_limited");
-  }
+  url.searchParams.set("placeId", placeId);
+
+  const response = await fetch(url.toString(), {
+    credentials: "include",
+    cache: "no-store",
+  });
 
   if (!response.ok) {
+    const data = await response.json()
+      .catch(() => null) as {
+        error?: string;
+      } | null;
+
+    if (data?.error === "daily_quota_exceeded") {
+      throw new Error("daily_quota_exceeded");
+    }
+
+    if (response.status === 429) {
+      throw new Error("rate_limited");
+    }
+
     throw new Error("request_failed");
   }
 

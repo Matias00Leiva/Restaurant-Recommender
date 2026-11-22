@@ -10,7 +10,7 @@ export async function getRecommendations(): Promise<
   RecommendedRestaurant[]
 > {
   const response = await fetch(
-    "http://localhost:8000/api/recommendations",
+    "/api/recommendations",
     {
       credentials: "include",
     },

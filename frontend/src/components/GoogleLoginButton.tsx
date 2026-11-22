@@ -1,10 +1,14 @@
-import { useLanguage } from "../i18n/LanguageContext.tsx";
+
+import {
+  useLanguage,
+} from "../i18n/LanguageContext.tsx";
 
 export default function GoogleLoginButton() {
   const { t } = useLanguage();
 
+  // Start OAuth through the current website origin.
   return (
-    <a href="http://localhost:8000/api/auth/google">
+    <a href="/api/auth/google">
       {t("googleButton")}
     </a>
   );

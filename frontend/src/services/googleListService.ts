@@ -1,7 +1,10 @@
 
 const API_URL =
   import.meta.env.VITE_API_URL ??
-  "http://localhost:8000";
+  window.location.origin;
+
+export const GOOGLE_LIST_EVENT =
+  "foodiefind-google-list-changed";
 
 export type GoogleListStatus =
   | "visited"
@@ -12,7 +15,19 @@ export interface GoogleListItem {
   status: GoogleListStatus;
 }
 
-// Retrieve the user's saved Google places.
+export interface SavedGoogleRestaurant
+  extends GoogleListItem {
+  name: string | null;
+  address: string | null;
+  mapsUrl: string;
+}
+
+export interface GoogleListChangeDetail {
+  placeId: string;
+  status: GoogleListStatus | null;
+}
+
+// Retrieve saved Google Place IDs from SQLite.
 export async function getGoogleList(): Promise<
   GoogleListItem[]
 > {
@@ -20,11 +35,14 @@ export async function getGoogleList(): Promise<
     `${API_URL}/api/google-my-lists`,
     {
       credentials: "include",
+      cache: "no-store",
     },
   );
 
   if (!response.ok) {
-    throw new Error("Failed to load Google lists");
+    throw new Error(
+      "Failed to load Google restaurant list",
+    );
   }
 
   const data = await response.json() as {
@@ -34,7 +52,7 @@ export async function getGoogleList(): Promise<
   return data.items;
 }
 
-// Save, update, or remove a Google restaurant.
+// Save or remove a restaurant from the user's list.
 export async function updateGoogleList(
   placeId: string,
   status: GoogleListStatus | null,
@@ -55,37 +73,26 @@ export async function updateGoogleList(
   );
 
   if (!response.ok) {
-    throw new Error("Failed to update Google list");
+    throw new Error(
+      "Failed to update Google restaurant list",
+    );
   }
 
-window.dispatchEvent(
-  new CustomEvent<GoogleListChangeDetail>(
-    GOOGLE_LIST_EVENT,
-    {
-      detail: { placeId, status },
-    },
-  ),
-);
-
+  // Synchronize list changes across FoodieFind.
+  window.dispatchEvent(
+    new CustomEvent<GoogleListChangeDetail>(
+      GOOGLE_LIST_EVENT,
+      {
+        detail: {
+          placeId,
+          status,
+        },
+      },
+    ),
+  );
 }
 
-
-export interface SavedGoogleRestaurant
-  extends GoogleListItem {
-  name: string | null;
-  address: string | null;
-  mapsUrl: string;
-}
-
-export interface GoogleListChangeDetail {
-  placeId: string;
-  status: GoogleListStatus | null;
-}
-
-export const GOOGLE_LIST_EVENT =
-  "foodiefind-google-list-changed";
-
-// Load saved restaurants with their current Google details.
+// Retrieve live Google restaurant details when available.
 export async function getSavedGoogleRestaurants(
   placeId?: string,
 ): Promise<SavedGoogleRestaurant[]> {
@@ -105,7 +112,7 @@ export async function getSavedGoogleRestaurants(
 
   if (!response.ok) {
     throw new Error(
-      "Failed to load saved Google restaurant details",
+      "Failed to load Google restaurant details",
     );
   }
 

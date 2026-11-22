@@ -1,7 +1,7 @@
 
 import type { RestaurantFilters } from "./restaurantService.ts";
 
-const API_URL = "http://localhost:8000";
+const API_URL = window.location.origin;
 
 // Structure of a saved search.
 export interface SearchHistoryItem {

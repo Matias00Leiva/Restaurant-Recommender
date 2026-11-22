@@ -1,115 +1,93 @@
-import { useEffect, useState } from "react";
+import { useUiText } from "../i18n/uiText.ts";
 
 import {
-  getRestaurants,
-  type Restaurant,
-} from "../services/restaurantService.ts";
+  useLanguage,
+} from "../i18n/LanguageContext.tsx";
 
-import { useLanguage } from "../i18n/LanguageContext.tsx";
+// Validate Google Place IDs included in a public URL.
+function readGoogleIds(
+  value: string | null,
+): string[] {
+  return [
+    ...new Set(
+      (value ?? "")
+        .split(",")
+        .filter((id) =>
+          /^[A-Za-z0-9_-]{5,255}$/.test(id)
+        ),
+    ),
+  ].slice(0, 30);
+}
 
-// Read restaurant IDs from the shared URL.
-function readIds(value: string | null): string[] {
-  return [...new Set(
-    (value ?? "")
-      .split(",")
-      .filter((id) => /^[a-zA-Z0-9-]{1,100}$/.test(id)),
-  )].slice(0, 30);
+// Build a Google Maps URL without a paid API request.
+function mapsUrlFromId(placeId: string): string {
+  const url = new URL(
+    "https://www.google.com/maps/search/",
+  );
+
+  url.searchParams.set("api", "1");
+  url.searchParams.set("query", "restaurant");
+  url.searchParams.set("query_place_id", placeId);
+
+  return url.toString();
 }
 
 export default function SharedPage() {
+  const ui = useUiText();
   const { t } = useLanguage();
 
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  const params = new URLSearchParams(window.location.search);
-
-  const restaurantId = params.get("restaurant");
-  const visitedIds = readIds(params.get("visited"));
-  const toVisitIds = readIds(params.get("toVisit"));
-
-  const isSharedList =
-    params.has("visited") || params.has("toVisit");
-
-  // Load the public restaurant catalog.
-  useEffect(() => {
-    let active = true;
-
-    getRestaurants()
-      .then((data) => {
-        if (active) setRestaurants(data);
-      })
-      .catch(() => {
-        if (active) setError(true);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  // Translate stored restaurant categories.
-  function translateCategory(category: string): string {
-    switch (category) {
-      case "Japonesa":
-        return t("categoryJapanese");
-      case "Italiana":
-        return t("categoryItalian");
-      case "Hamburguesas":
-        return t("categoryBurgers");
-      default:
-        return category;
-    }
-  }
-
-  // Translate descriptions for the demo restaurants.
-  function translateDescription(description: string): string {
-    switch (description) {
-      case "Restaurante especializado en hamburguesas.":
-        return t("descriptionBurgers");
-      case "Restaurante especializado en comida italiana.":
-        return t("descriptionItalian");
-      case "Restaurante especializado en sushi y comida japonesa.":
-        return t("descriptionJapanese");
-      default:
-        return description;
-    }
-  }
-
-  const selectedRestaurant = restaurants.find(
-    (item) => item.id === restaurantId,
+  const params = new URLSearchParams(
+    window.location.search,
   );
 
-  const visited = restaurants.filter(
-    (item) => visitedIds.includes(item.id),
+  const toVisit = readGoogleIds(
+    params.get("gToVisit"),
   );
 
-  const toVisit = restaurants.filter(
-    (item) => toVisitIds.includes(item.id),
+  const visited = readGoogleIds(
+    params.get("gVisited"),
   );
 
-  function renderRestaurant(restaurant: Restaurant) {
+  const hasSharedList =
+    params.has("gToVisit") ||
+    params.has("gVisited");
+
+  function renderPlaces(
+    placeIds: string[],
+    title: string,
+  ) {
     return (
-      <article className="shared-restaurant" key={restaurant.id}>
-        <h3>{restaurant.name}</h3>
+      <section className="shared-list-group">
+        <h2>
+          {title} ({placeIds.length})
+        </h2>
 
-        <p>{translateCategory(restaurant.category)}</p>
-        <p>{translateDescription(restaurant.description)}</p>
-        <p>{restaurant.address}</p>
+        {placeIds.length === 0 ? (
+          <p>{t("sharedEmptyList")}</p>
+        ) : (
+          placeIds.map((placeId, index) => (
+            <article
+              className="shared-restaurant"
+              key={placeId}
+            >
+              <h3>
+                {t("sharedGooglePlace")}{" "}
+                #{index + 1}
+              </h3>
 
-        <p>
-          {t("estimatedPrice")}:{" "}
-          {restaurant.averagePrice.toLocaleString("es-CL", {
-            style: "currency",
-            currency: "CLP",
-            maximumFractionDigits: 0,
-          })}
-        </p>
-      </article>
+              <p>Google Maps</p>
+
+              <a
+                href={mapsUrlFromId(placeId)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t("sharedGoogleOpen")}
+              </a>
+            </article>
+          ))
+        )}
+      </section>
     );
   }
 
@@ -117,35 +95,22 @@ export default function SharedPage() {
     <main className="shared-page">
       <header className="shared-header">
         <a className="brand" href="/">
-          <span className="brand-symbol">F</span>
+          <span className="brand-symbol">
+            F
+          </span>
           <span>FoodieFind</span>
         </a>
 
-        <a className="shared-home-link" href="/">
+        <a
+          className="shared-home-link"
+          href="/"
+        >
           {t("sharedHome")}
         </a>
       </header>
 
       <div className="shared-content">
-        {loading ? (
-          <p>{t("sharedLoading")}</p>
-        ) : error ? (
-          <p>{t("sharedError")}</p>
-        ) : restaurantId ? (
-          <>
-            <span className="section-eyebrow">
-              {t("sharedRestaurantEyebrow")}
-            </span>
-
-            <h1>{t("sharedRestaurantTitle")}</h1>
-
-            {selectedRestaurant ? (
-              renderRestaurant(selectedRestaurant)
-            ) : (
-              <p>{t("sharedRestaurantMissing")}</p>
-            )}
-          </>
-        ) : isSharedList ? (
+        {hasSharedList ? (
           <>
             <span className="section-eyebrow">
               {t("sharedListsEyebrow")}
@@ -153,41 +118,29 @@ export default function SharedPage() {
 
             <h1>{t("sharedListsTitle")}</h1>
 
-            <p>{t("sharedListsDescription")}</p>
+            <p>
+              {ui("ui_restaurant_list_shared_from_foodief_9b54067")}
+            </p>
 
             <div className="shared-list-grid">
-              <section className="shared-list-group">
-                <h2>
-                  {t("listsToVisit")} ({toVisit.length})
-                </h2>
+              {renderPlaces(
+                toVisit,
+                t("listsToVisit"),
+              )}
 
-                {toVisit.length === 0 ? (
-                  <p>{t("sharedEmptyList")}</p>
-                ) : (
-                  toVisit.map(renderRestaurant)
-                )}
-              </section>
-
-              <section className="shared-list-group">
-                <h2>
-                  {t("listsVisited")} ({visited.length})
-                </h2>
-
-                {visited.length === 0 ? (
-                  <p>{t("sharedEmptyList")}</p>
-                ) : (
-                  visited.map(renderRestaurant)
-                )}
-              </section>
+              {renderPlaces(
+                visited,
+                t("listsVisited"),
+              )}
             </div>
+
+            <p className="shared-disclaimer">
+              {ui("ui_links_open_the_real_restaurant_list_24fb5a1")}
+            </p>
           </>
         ) : (
           <p>{t("sharedInvalidLink")}</p>
         )}
-
-        <p className="shared-disclaimer">
-          {t("sharedDisclaimer")}
-        </p>
       </div>
     </main>
   );

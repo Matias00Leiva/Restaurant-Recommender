@@ -1,278 +1,368 @@
-## Recomendador Personalizado de restaurantes
 
-## Backend
+# FoodieFind — Recomendador personalizado de restaurantes
 
-El backend del Recomendador Personalizado de Restaurantes gestiona la autenticación de usuarios, la persistencia de sus perfiles y el control de sesiones. Expone endpoints HTTP que permiten iniciar sesión con Google, consultar el usuario autenticado y cerrar la sesión.
+**Proyecto semestral | Diseño de Software | Universidad Adolfo Ibáñez | 2026-2**
 
-### Tecnologías utilizadas
+FoodieFind es una aplicación web para descubrir restaurantes cercanos y recibir recomendaciones personalizadas a partir de las preferencias del usuario, su historial de búsquedas y sus calificaciones. Incorpora autenticación con Google, geolocalización, búsqueda de restaurantes reales mediante Google Places, listas personales y consulta de reseñas.
 
-| Tecnología | Función |
+> **Estado del proyecto:** la implementación prevista está integrada y supera las verificaciones automatizadas disponibles. La validación funcional completa en el navegador y las consultas reales a Google Places dependen de la configuración y las cuotas del servicio. El entorno de demostración es **local**; no incluye despliegue público.
+
+## 1. Objetivos
+
+- Permitir descubrir restaurantes considerando la ubicación y el tipo de comida.
+- Filtrar los resultados por nombre, categoría gastronómica, distancia y nivel de presupuesto disponible.
+- Proponer restaurantes utilizando interacciones y preferencias personales.
+- Guardar restaurantes en listas de **visitados** y **por visitar**.
+- Consultar opiniones externas y registrar calificaciones propias.
+- Compartir enlaces de restaurantes y listas.
+- Ofrecer una interfaz adaptable y disponible en español e inglés.
+
+## 2. Funcionalidades
+
+| Módulo | Descripción |
 | --- | --- |
-| Deno | Ejecutar el servidor y las herramientas de comprobación del proyecto. |
-| TypeScript | Definir los tipos de datos y comprobar el código del backend. |
-| SQLite | Conservar usuarios, sesiones y solicitudes temporales de autenticación. |
-| Google OpenID Connect | Autenticar al usuario mediante su cuenta de Google y proporcionar acceso con SSO. |
-| jose | Verificar la firma y los datos del ID token emitido por Google. |
+| Autenticación SSO | Inicio de sesión con Google mediante OpenID Connect; gestión de sesiones en el backend. |
+| Restaurantes reales | Consulta de restaurantes a través de Google Places API (New). |
+| Geolocalización | Solicita permiso al navegador para calcular restaurantes próximos al usuario. |
+| Búsqueda y filtros | Búsqueda por nombre, tipo de cocina, distancia y nivel de precio cuando Google lo informa. |
+| Ordenamiento y paginación | Orden por distancia, valoración o cantidad de opiniones; visualización progresiva de seis resultados. |
+| Recomendaciones | Algoritmo basado en reglas que utiliza búsquedas anteriores, preferencias por categoría y calificaciones personales. |
+| Calificaciones personales | Registro de puntuaciones entre 1 y 5, asociadas al usuario en SQLite. |
+| Listas | Guarda restaurantes como **por visitar** o **visitados**. |
+| Compartir | Genera enlaces a fichas de Google Maps y enlaces que contienen una copia de los IDs de las listas. |
+| Reseñas externas | Consulta bajo demanda de reseñas de un restaurante seleccionado, más resumen de puntuaciones y temas mencionados. |
+| Multilenguaje | Español e inglés con un diccionario de traducciones propio, sin servicios externos de traducción. |
+| Responsive | Interfaz CSS adaptada a distintas resoluciones; requiere comprobación visual final. |
 
-### Organización del código
+### Alcance de los datos de Google
 
-El backend separa la configuración, el acceso a datos, la lógica de autenticación y la atención de solicitudes.
+- Los restaurantes se identifican mediante **Google Place ID**.
+- El presupuesto utiliza niveles cualitativos como económico, moderado o alto (`priceLevel`); **no representa precios exactos en pesos chilenos**.
+- Google Places puede no entregar precio, calificación o reseñas para determinados establecimientos.
+- El análisis de reseñas se construye solamente con los comentarios devueltos por Google (hasta cinco en una consulta de detalles). **No constituye una serie histórica representativa**.
+- Las consultas de Nearby Search y Place Details dependen de las cuotas y la facturación de Google Cloud.
 
-| Carpeta | Responsabilidad |
+## 3. Tecnologías
+
+| Capa | Tecnologías |
 | --- | --- |
-| `src/config` | Leer variables de entorno y preparar la base de datos. |
-| `src/models` | Definir los tipos del usuario y del perfil recibido de Google. |
-| `src/repositories` | Ejecutar consultas SQL para guardar, consultar y eliminar datos. |
-| `src/services` | Gestionar el acceso con Google, las cookies y las sesiones. |
-| `src/controllers` | Coordinar las operaciones y construir las respuestas HTTP. |
-| `src/middleware` | Comprobar la sesión antes de permitir el acceso a recursos protegidos. |
-| `src/routes` | Asociar los métodos y rutas HTTP con sus controladores. |
-| `data` | Almacenar el archivo local de SQLite. |
-| `tests` | Contener las pruebas automatizadas de autenticación y sesiones. |
+| Frontend | React, TypeScript, Vite, CSS |
+| Backend | Deno, TypeScript, API HTTP basada en `Request` y `Response` |
+| Base de datos | SQLite mediante `node:sqlite` |
+| Identidad | Google OAuth 2.0 / OpenID Connect y biblioteca `jose` |
+| Datos externos | Google Places API (New) y enlaces a Google Maps |
+| Herramientas | Git, GitHub, VS Code, Deno |
 
-`src/server.ts` inicia el servidor. `src/app.ts` recibe las solicitudes, atiende el endpoint de salud y delega las operaciones de autenticación a sus rutas correspondientes.
+El recomendador implementa un **sistema basado en reglas y puntuaciones**, no un modelo de aprendizaje automático entrenado.
 
-### Autenticación con Google
+## 4. Arquitectura
 
-La aplicación utiliza Google como proveedor de identidad para cumplir el requisito de inicio de sesión con SSO. Google comprueba el acceso a la cuenta, mientras que nuestro backend valida su respuesta y administra la cuenta local del usuario.
+```text
+Navegador
+   |
+   v
+React + TypeScript + Vite (localhost:5173)
+   |
+   | HTTP /api + cookie de sesión
+   v
+Deno + TypeScript (localhost:8000)
+   |
+   +-- routes/        -> Endpoints y validaciones HTTP
+   +-- controllers/   -> Lógica de controladores
+   +-- middleware/    -> Protección de rutas y autenticación
+   +-- services/      -> OAuth, Google Places, recomendaciones
+   +-- repositories/  -> Acceso a datos
+   +-- config/        -> Configuración y variables de entorno
+   |
+   +----> SQLite: usuarios, sesiones, búsquedas,
+   |               calificaciones y listas
+   |
+   +----> Google OAuth / OpenID Connect
+   |
+   +----> Google Places API (New)
+```
 
-El proceso de autenticación es el siguiente:
+**Flujo principal:** el usuario inicia sesión con Google; el backend valida su identidad y crea una sesión. El frontend obtiene su perfil y permite buscar restaurantes reales. Las búsquedas se realizan desde el backend con la clave de Google Places. Las calificaciones y listas personales se almacenan en SQLite. El recomendador combina estos datos para ordenar restaurantes y mostrar el motivo de la sugerencia.
 
-1. El backend genera una solicitud temporal de acceso y redirige el navegador a Google.
-2. Google autentica al usuario y devuelve un código de autorización al callback.
-3. El backend verifica que la respuesta corresponda a la solicitud iniciada e intercambia el código por tokens.
-4. Se valida la firma, el emisor, la audiencia y el vencimiento del ID token, además del `nonce` y del correo verificado.
-5. Se registra o actualiza el perfil del usuario en SQLite y se crea una sesión local.
-6. El backend envía una cookie de sesión y redirige al navegador a la ruta de perfil de la interfaz.
+## 5. Estructura del proyecto
 
-Las solicitudes de acceso utilizan `state`, `nonce` y PKCE. Cada solicitud vence después de 10 minutos y se consume una sola vez.
+```text
+Restaurant-Recommender/
+├── backend/
+│   ├── src/
+│   │   ├── config/
+│   │   ├── controllers/
+│   │   ├── middleware/
+│   │   ├── models/
+│   │   ├── repositories/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── app.ts
+│   │   └── server.ts
+│   ├── data/                    # Base SQLite local (no versionar)
+│   ├── tests/
+│   ├── deno.json
+│   └── .env                     # Credenciales privadas (no versionar)
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── i18n/
+│   │   ├── pages/
+│   │   └── services/
+│   ├── package.json
+│   └── vite.config.ts
+└── README.md
+```
 
-Las credenciales de la cuenta de Google se administran en Google. El backend no almacena contraseñas de usuarios ni implementa un registro con contraseña propia.
+La estructura muestra las carpetas principales. Pueden existir componentes y rutas heredados del catálogo de demostración, conservados para no afectar pruebas o datos anteriores.
 
-### Persistencia con SQLite
+## 6. Instalación y ejecución local
 
-SQLite permite conservar los datos en un archivo local sin administrar un servidor de base de datos adicional. Al iniciar el backend se crea automáticamente el archivo `data/restaurant.db` y las tablas necesarias.
+### 6.1. Requisitos previos
 
-| Tabla | Propósito |
-| --- | --- |
-| `users` | Guardar el identificador local, el identificador de Google, el correo, el nombre, la imagen y la fecha de creación del usuario. |
-| `sessions` | Guardar el hash del identificador de sesión, el usuario asociado y el vencimiento. |
-| `oauth_states` | Guardar los datos temporales necesarios para validar una solicitud de acceso con Google. |
+- **Deno 2.x** instalado y disponible en la terminal.
+- Navegador web compatible con geolocalización.
+- Credenciales OAuth de Google Cloud de tipo **Aplicación web**.
+- **Places API (New)** habilitada y una clave de API válida para el backend.
+- Conexión a Internet para el inicio de sesión con Google y las consultas a Places.
 
-El identificador de Google permite reconocer al mismo usuario en accesos posteriores. Su perfil se actualiza conservando el identificador local y la fecha de creación.
+### 6.2. Configurar el backend
 
-### Sesiones y protección de endpoints
+Desde la raíz del proyecto:
 
-La sesión se administra mediante un identificador aleatorio generado por el backend. El navegador recibe ese identificador en una cookie `HttpOnly` con `SameSite=Lax`; SQLite conserva su hash y vencimiento.
+```bash
+cd backend
+```
 
-Las sesiones duran 24 horas. Los endpoints protegidos comprueban que la sesión exista y siga vigente antes de devolver información. Una solicitud sin una sesión válida recibe una respuesta HTTP `401 Unauthorized`.
+Crea el archivo `backend/.env` con tus credenciales reales:
 
-Al cerrar sesión, el backend revoca el identificador y elimina la cookie. Esta operación también comprueba el origen de la solicitud. Cuando el callback se configura con HTTPS, las cookies incorporan el atributo `Secure`.
+```dotenv
+PORT=8000
+FRONTEND_ORIGIN=http://localhost:5173
+GOOGLE_CLIENT_ID=TU_CLIENT_ID
+GOOGLE_CLIENT_SECRET=TU_CLIENT_SECRET
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
+GOOGLE_PLACES_API_KEY=TU_GOOGLE_PLACES_API_KEY
+```
 
-El ID token de Google se utiliza durante la autenticación. La aplicación no genera un JWT propio para administrar sus sesiones.
+En la consola de Google Cloud, registra como **URI de redirección autorizada**:
 
-### Endpoints
+```text
+http://localhost:8000/api/auth/google/callback
+```
+
+Inicia el servidor:
+
+```bash
+deno task dev
+```
+
+Por defecto, el backend responde en `http://localhost:8000`. La base SQLite se crea/utiliza en `backend/data/restaurant.db`.
+
+Comprueba el estado del servidor en otra terminal:
+
+```bash
+curl http://localhost:8000/api/health
+```
+
+Respuesta esperada:
+
+```json
+{"status":"ok"}
+```
+
+### 6.3. Configurar el frontend
+
+Abre otra terminal y ubícate en la carpeta correspondiente:
+
+```bash
+cd frontend
+```
+
+Instala las dependencias si todavía no están instaladas:
+
+```bash
+deno install
+```
+
+Ejecuta el frontend:
+
+```bash
+deno task dev
+```
+
+Abre **http://localhost:5173**.
+
+**Conexión frontend–backend:** la configuración local de Vite debe reenviar las solicitudes `/api` hacia `http://127.0.0.1:8000`. Se puede comprobar abriendo `http://localhost:5173/api/health` y verificando que responda el JSON anterior. Los archivos que utilizan `VITE_API_URL` deben apuntar a un origen compatible con la configuración local; no se debe exponer la clave privada de Places en el frontend.
+
+### 6.4. Detener la aplicación
+
+Presiona `Ctrl + C` en las dos terminales. No es necesario utilizar Cloudflare Tunnel ni una dirección pública.
+
+## 7. Flujo de uso
+
+1. Entrar a `http://localhost:5173` e iniciar sesión con Google.
+2. Acceder al dashboard con la cuenta autenticada.
+3. Autorizar la geolocalización y elegir el radio de búsqueda disponible.
+4. Buscar restaurantes reales, ordenar los resultados y aplicar filtros.
+5. Mostrar resultados adicionales con el botón **Ver más**, sin volver a consultar Google para paginar los resultados ya recibidos.
+6. Calificar restaurantes de 1 a 5 y guardarlos como **por visitar** o **visitados**.
+7. Solicitar recomendaciones personalizadas considerando las interacciones guardadas.
+8. Seleccionar un restaurante, consultar sus reseñas y revisar el resumen de la muestra.
+9. Abrir su ubicación en Google Maps, compartir enlaces y cambiar entre español e inglés.
+
+## 8. Sistema de recomendaciones
+
+La personalización se implementa mediante un algoritmo de puntuación. En términos generales:
+
+- Utiliza las calificaciones positivas y negativas del usuario para inferir afinidad con categorías de comida.
+- Considera el historial de búsqueda para identificar intereses.
+- Puede valorar restaurantes guardados o sus características relacionadas.
+- Excluye los restaurantes registrados como **visitados** de las nuevas sugerencias.
+- Utiliza información como popularidad y cercanía para complementar el ordenamiento.
+- Devuelve recomendaciones con una explicación de la razón predominante.
+
+Las calificaciones **personales** guardadas por FoodieFind son distintas de las calificaciones **públicas** de Google Maps. No se publica ninguna calificación del usuario en Google.
+
+## 9. Reseñas y tendencias
+
+La aplicación consulta los detalles del restaurante seleccionado utilizando su Google Place ID. Cuando Google proporciona comentarios, FoodieFind puede mostrar:
+
+- Calificación general del restaurante y número total de calificaciones de Google.
+- Comentarios individuales disponibles.
+- Distribución de estrellas **dentro de la muestra recibida**.
+- Cantidad de opiniones positivas, neutrales y negativas de la muestra.
+- Temas frecuentes detectados con reglas de texto (por ejemplo, comida, servicio o precio).
+- Comparación orientativa entre comentarios anteriores y más recientes cuando hay suficientes fechas.
+
+**Limitación:** el análisis no incluye todas las reseñas del restaurante. Los comentarios devueltos por Google son una selección reducida; no representan necesariamente la evolución real de su reputación. Si no se reciben comentarios, se muestra la información disponible y el acceso a Google Maps.
+
+Para evitar consultas repetidas, el endpoint de reseñas aplica una espera de dos minutos entre solicitudes dentro del mismo proceso de servidor.
+
+## 10. Principales endpoints
 
 | Método | Ruta | Función |
 | --- | --- | --- |
-| GET | `/api/health` | Comprobar que el servidor responde. |
-| GET | `/api/auth/google` | Iniciar el acceso con Google. |
-| GET | `/api/auth/google/callback` | Procesar y validar la respuesta de Google. |
-| GET | `/api/auth/me` | Consultar el perfil del usuario con una sesión válida. |
-| POST | `/api/auth/logout` | Revocar la sesión del usuario. |
+| `GET` | `/api/health` | Estado del servidor. |
+| `GET` | `/api/auth/google` | Inicio del flujo de autenticación. |
+| `GET` | `/api/auth/google/callback` | Recepción de la autorización de Google. |
+| `GET` | `/api/auth/me` | Información del usuario autenticado. |
+| `POST` | `/api/auth/logout` | Cierre de sesión. |
+| `GET` | `/api/nearby-restaurants?latitude=...&longitude=...&radiusKm=...` | Consulta de restaurantes cercanos. |
+| `GET` | `/api/google-reviews?placeId=...` | Reseñas del restaurante elegido. |
+| `GET / POST` | `/api/google-ratings` | Consulta y actualización de calificaciones personales. |
+| `GET / POST` | `/api/google-my-lists` | Consulta y actualización de listas personales. |
+| `GET` | `/api/google-my-lists/details` | Detalles disponibles de restaurantes guardados. |
+| `GET / POST` | `/api/search-history` | Consulta y registro del historial. |
+| `GET` | `/api/restaurants` | Catálogo histórico de demostración conservado en backend. |
 
-### Configuración y ejecución
+Las rutas de datos personales y de Google Places requieren autenticación cuando corresponde. El cálculo de recomendaciones reales se efectúa a partir de los restaurantes recuperados y las preferencias del usuario.
 
-Se utilizó Deno 2.9.6 para el desarrollo. La configuración del backend se declara en `deno.json` y las variables de entorno se preparan a partir de `.env.example`.
+## 11. Pruebas y validaciones
 
-Crea `backend/.env` a partir de esa plantilla y completa los valores de Google:
+### Backend
 
-```dotenv
-PORT=8000
-FRONTEND_ORIGIN=http://localhost:5173
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
-```
-
-El cliente OAuth debe ser de tipo aplicación web y tener autorizada la misma URI de redirección configurada en `GOOGLE_REDIRECT_URI`. El Client Secret se utiliza únicamente en el backend.
-
-Desde la raíz del repositorio, instala las dependencias e inicia el servidor:
-
-```bash
-cd backend
-deno install
-deno task dev
-```
-
-La base de datos se crea automáticamente. `.gitignore` excluye el archivo `.env`, la base local, las dependencias instaladas y los archivos de compilación.
-
-### Comprobación del backend
-
-Dentro de `backend`, ejecuta:
+En `backend/`:
 
 ```bash
 deno task check
-deno task lint
 deno task test
 ```
 
-Estas tareas comprueban los tipos, revisan el código y ejecutan las pruebas automatizadas. Las pruebas cubren el rechazo de accesos sin sesión, la validación del estado OAuth, la actualización del usuario y la validez, vencimiento y revocación de sesiones.
+**Resultado confirmado el 22 de noviembre de 2026:**
 
-Las pruebas automatizadas no realizan un acceso real a Google. La comprobación del flujo completo requiere configurar las credenciales OAuth e integrar la interfaz.
-
-### Autoría y referencias
-
-Este backend se elaboró con asistencia de ChatGPT/Codex para la preparación y explicación del código.
-
-- [Documentación de Deno](https://docs.deno.com/).
-- [SQLite con Deno](https://docs.deno.com/examples/sqlite/).
-- [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
-- [Biblioteca jose](https://github.com/panva/jose).
-
-
-
-
-
-
-
-
-
-
-
-
-
-## English version: 
-
-
-## Backend
-
-The backend of the Personalized Restaurant Recommender manages user authentication, profile persistence, and sessions. It exposes HTTP endpoints for signing in with Google, retrieving the authenticated user's profile, and signing out.
-
-### Technologies
-
-| Technology | Purpose |
-| --- | --- |
-| Deno | Run the server and the project's validation tools. |
-| TypeScript | Define data types and check the backend code. |
-| SQLite | Persist users, sessions, and temporary authentication requests. |
-| Google OpenID Connect | Authenticate users through their Google accounts and provide SSO. |
-| jose | Verify the signature and claims of the ID token issued by Google. |
-
-### Code Organization
-
-The backend separates configuration, data access, authentication logic, and request handling.
-
-| Directory | Responsibility |
-| --- | --- |
-| `src/config` | Read environment variables and initialize the database. |
-| `src/models` | Define types for users and profiles received from Google. |
-| `src/repositories` | Execute SQL queries to store, retrieve, and delete data. |
-| `src/services` | Manage Google authentication, cookies, and sessions. |
-| `src/controllers` | Coordinate operations and build HTTP responses. |
-| `src/middleware` | Validate sessions before granting access to protected resources. |
-| `src/routes` | Map HTTP methods and paths to their controllers. |
-| `data` | Store the local SQLite database file. |
-| `tests` | Contain automated authentication and session tests. |
-
-`src/server.ts` starts the server. `src/app.ts` receives requests, handles the health endpoint, and delegates authentication operations to their corresponding routes.
-
-### Google Authentication
-
-The application uses Google as its identity provider to satisfy the SSO login requirement. Google authenticates the account, while the backend validates Google's response and manages the user's local account.
-
-The authentication process works as follows:
-
-1. The backend creates a temporary authentication request and redirects the browser to Google.
-2. Google authenticates the user and returns an authorization code to the callback.
-3. The backend verifies that the response matches the original request and exchanges the code for tokens.
-4. It validates the ID token's signature, issuer, audience, and expiration, along with the `nonce` and verified email status.
-5. It creates or updates the user's profile in SQLite and creates a local session.
-6. The backend sends a session cookie and redirects the browser to the frontend's profile route.
-
-Authentication requests use `state`, `nonce`, and PKCE. Each request expires after 10 minutes and can only be used once.
-
-Google manages Google account credentials. The backend does not store user passwords or implement password-based registration.
-
-### SQLite Persistence
-
-SQLite stores data in a local file without requiring a separate database server. When the backend starts, it automatically creates `data/restaurant.db` and the required tables.
-
-| Table | Purpose |
-| --- | --- |
-| `users` | Store the user's local identifier, Google identifier, email, name, profile picture, and creation date. |
-| `sessions` | Store the hash of the session identifier, the associated user, and the expiration time. |
-| `oauth_states` | Store the temporary data required to validate a Google authentication request. |
-
-The Google identifier allows the backend to recognize the same user on subsequent sign-ins. The profile is updated while preserving the local identifier and creation date.
-
-### Sessions and Protected Endpoints
-
-Sessions use a random identifier generated by the backend. The browser receives this identifier in an `HttpOnly` cookie with `SameSite=Lax`; SQLite stores its hash and expiration time.
-
-Sessions last 24 hours. Protected endpoints verify that the session exists and remains valid before returning information. Requests without a valid session receive an HTTP `401 Unauthorized` response.
-
-During sign-out, the backend revokes the session identifier and removes the cookie. This operation also checks the request's origin. When the callback is configured with HTTPS, cookies include the `Secure` attribute.
-
-Google's ID token is used during authentication. The application does not generate its own JWT to manage sessions.
-
-### Endpoints
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/api/health` | Check that the server responds. |
-| GET | `/api/auth/google` | Start Google sign-in. |
-| GET | `/api/auth/google/callback` | Process and validate Google's response. |
-| GET | `/api/auth/me` | Retrieve the user's profile through a valid session. |
-| POST | `/api/auth/logout` | Revoke the user's session. |
-
-### Configuration and Execution
-
-The backend was developed with Deno 2.9.6. Backend configuration is defined in `deno.json`, and environment variables are configured using `.env.example` as a template.
-
-Create `backend/.env` from that template and fill in the Google credentials:
-
-```dotenv
-PORT=8000
-FRONTEND_ORIGIN=http://localhost:5173
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
+```text
+ok | 20 passed | 0 failed
 ```
 
-The OAuth client must be configured as a web application, with an authorized redirect URI that matches `GOOGLE_REDIRECT_URI`. The Client Secret is used exclusively by the backend.
+| Archivo de pruebas | Pruebas aprobadas |
+| --- | ---: |
+| `auth_test.ts` | 4 |
+| `nearby_test.ts` | 4 |
+| `places_features_test.ts` | 2 |
+| `real_recommendation_test.ts` | 6 |
+| `restaurant_test.ts` | 4 |
+| **Total** | **20** |
 
-From the repository root, install the dependencies and start the server:
+También se ejecutó `deno task check` sin errores. La tarea `check` configurada comprueba `src/server.ts` y `tests/auth_test.ts`; la ejecución de `deno task test` comprobó además los otros archivos de prueba antes de ejecutarlos.
+
+El error `RESOURCE_EXHAUSTED` que se muestra en una prueba es **simulado intencionalmente** para comprobar la gestión del límite diario, y esa prueba terminó correctamente.
+
+### Frontend
+
+En `frontend/`:
 
 ```bash
-cd backend
-deno install
-deno task dev
+deno task build
 ```
 
-The database is created automatically. `.gitignore` excludes the `.env` file, the local database, installed dependencies, and build output.
+**Resultado confirmado el 22 de noviembre de 2026:** TypeScript y Vite completaron la compilación sin errores; se transformaron **38 módulos**.
 
-### Backend Validation
+### Comprobaciones manuales pendientes
 
-From the `backend` directory, run:
+Las pruebas automatizadas y la compilación no reemplazan la verificación del flujo completo en el navegador. Antes de la demostración, comprobar:
+
+- Inicio de sesión y acceso al dashboard.
+- Búsqueda de restaurantes reales cuando exista cuota de Google disponible.
+- Filtros de cocina, presupuesto y distancia.
+- Guardado, eliminación y lectura de listas y calificaciones.
+- Cambio del orden de recomendaciones después de registrar preferencias.
+- Consulta de reseñas y apertura de enlaces de Google Maps.
+- Interfaz en español/inglés y visualización en tamaño móvil.
+
+## 12. Seguridad y manejo de datos
+
+- Autenticación con Google OpenID Connect; las credenciales privadas permanecen en el backend.
+- Cookies de sesión y comprobaciones de autenticación para proteger operaciones personales.
+- Persistencia de usuarios, sesiones, búsquedas, calificaciones y listas en SQLite local.
+- Consultas a Google Places desde el servidor para evitar colocar la clave privada en React.
+- Validación de coordenadas y radios; manejo de errores de cuota y de servicios externos.
+- Los enlaces de listas compartidas codifican IDs de restaurantes, no credenciales de los usuarios.
+
+**Nunca subir a GitHub:** `backend/.env`, `frontend/.env.local`, claves API, secretos OAuth, archivos de base de datos, `node_modules/` ni `frontend/dist/`.
+
+Antes de publicar el proyecto se necesitaría una revisión adicional de HTTPS, restricciones de credenciales, facturación, sesiones, privacidad y políticas de Google Maps Platform. El despliegue público **no forma parte del alcance actual**.
+
+## 13. Limitaciones conocidas
+
+1. La disponibilidad de restaurantes y reseñas depende de Google Places y de sus cuotas diarias.
+2. El filtro de presupuesto usa categorías estimadas por Google, no valores monetarios exactos.
+3. El resumen de reseñas utiliza una muestra limitada y no debe interpretarse como tendencia histórica completa.
+4. Las recomendaciones son basadas en reglas; no emplean un modelo de ML entrenado.
+5. Los enlaces de listas reflejan los restaurantes incluidos al momento de compartir y no se actualizan automáticamente.
+6. En modo local, un enlace `localhost` no es accesible directamente desde otros dispositivos.
+7. Se conservan archivos del catálogo de ejemplo para compatibilidad, pero la interfaz principal está orientada a restaurantes reales.
+8. El comportamiento responsive y las integraciones externas requieren validación manual adicional.
+
+## 14. Desarrollo iterativo y versionamiento
+
+El trabajo se organizó de forma incremental: primero estructura del proyecto y autenticación; luego persistencia, frontend, catálogo y personalización; finalmente integración con Google Places, listas, reseñas, filtros y pruebas.
+
+El curso solicita **al menos un commit por semana** desde el 5 de octubre de 2026. La evidencia del proceso se encuentra en el historial real de Git; este documento no sustituye los commits ni debe atribuir fechas que no estén registradas.
+
+Comandos útiles antes de entregar:
 
 ```bash
-deno task check
-deno task lint
-deno task test
+git status
+git log --oneline --date=short -10
+git add README.md
+git commit -m "docs: update FoodieFind README and final validation"
+git push
 ```
 
-These tasks check types, lint the code, and run automated tests. The tests cover the rejection of requests without a session, OAuth state validation, user profile updates, and session validity, expiration, and revocation.
+Ejecuta `git commit` solo cuando los archivos correctos estén preparados y confirma primero que no incluyan información privada.
 
-The automated tests do not perform an actual Google sign-in. Verifying the complete flow requires configuring OAuth credentials and integrating the frontend.
+## 15. Documentación y referencias
 
-### Attribution and References
+- [Deno](https://docs.deno.com/)
+- [React](https://react.dev/)
+- [Vite](https://vite.dev/)
+- [SQLite](https://www.sqlite.org/)
+- [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
+- [Google Places API (New)](https://developers.google.com/maps/documentation/places/web-service/overview)
+- [Google Maps URLs](https://developers.google.com/maps/documentation/urls/guide)
+- [Biblioteca jose](https://github.com/panva/jose)
 
-This backend was developed with assistance from ChatGPT/Codex in preparing and explaining the code.
+### Asistencia de inteligencia artificial
 
-- [Deno documentation](https://docs.deno.com/).
-- [SQLite with Deno](https://docs.deno.com/examples/sqlite/).
-- [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
-- [jose library](https://github.com/panva/jose).
-- [jose library](https://github.com/panva/jose).
-- [jose library](https://github.com/panva/jose).
+Se utilizó **ChatGPT** como herramienta de apoyo para planificar la arquitectura, desarrollar y revisar código, resolver errores, diseñar pruebas y redactar documentación. El proyecto fue integrado y verificado mediante las herramientas de desarrollo y los resultados de pruebas indicados anteriormente. La asistencia de IA no sustituye la comprensión del código ni la validación manual de sus funcionalidades.

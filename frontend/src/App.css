@@ -113,8 +113,14 @@ select:focus-visible {
   max-width: 1200px;
   margin: 0 auto;
   padding: 32px 24px 64px;
+  overflow-x: hidden;
 }
 
+@media (max-width: 700px) {
+  .dashboard-main {
+    padding: 16px 16px 40px;
+  }
+}
 .hero {
   display: flex;
   justify-content: space-between;
@@ -926,20 +932,25 @@ select:focus-visible {
 
 .language-switcher {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: 16px;
+  bottom: 16px;
   z-index: 1000;
+
   display: flex;
   gap: 4px;
   padding: 5px;
-  background: white;
+
+  max-width: calc(100vw - 32px);
+
+  background: #fff;
   border: 1px solid #d8ded7;
   border-radius: 12px;
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.12);
 }
 
 .language-switcher button {
-  padding: 9px 13px;
+  min-width: 44px;
+  padding: 9px 12px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -953,6 +964,20 @@ select:focus-visible {
   color: white;
 }
 
+@media (max-width: 700px) {
+  .language-switcher {
+    right: 12px;
+    bottom: 12px;
+    padding: 4px;
+    gap: 4px;
+  }
+
+    .language-switcher button {
+    min-width: 40px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
 
 /* Google restaurants in personal lists */
 .saved-google-link {

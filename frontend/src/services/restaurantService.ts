@@ -22,7 +22,7 @@ export interface RestaurantFilters {
 export async function getRestaurants(
   filters: RestaurantFilters = {},
 ): Promise<Restaurant[]> {
-  const url = new URL("http://localhost:8000/api/restaurants");
+  const url = new URL("/api/restaurants", window.location.origin);
 
   if (filters.search?.trim()) {
     url.searchParams.set("search", filters.search.trim());

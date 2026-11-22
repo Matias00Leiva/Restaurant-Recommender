@@ -12,6 +12,12 @@ import { googleListRoutes } from "./routes/googleListRoutes.ts";
 
 import { googleListDetailsRoutes } from "./routes/googleListDetailsRoutes.ts";
 
+import { googleRatingRoutes } from "./routes/googleRatingRoutes.ts";
+
+import { realRecommendationRoutes } from "./routes/realRecommendationRoutes.ts";
+
+
+
 
 
 
@@ -43,8 +49,10 @@ response = (await authRoutes(request)) ??
   (await userListRoutes(request)) ??
   (await googleListDetailsRoutes(request)) ??
   (await googleListRoutes(request)) ??
+  (await googleRatingRoutes(request)) ??
   (await googleReviewRoutes(request)) ??
   (await nearbyRestaurantRoutes(request)) ??
+  (await realRecommendationRoutes(request)) ??
   restaurantRoutes(request) ??
 
   Response.json(

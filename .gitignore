@@ -1,2 +1,17 @@
 backend/.env
 backend/data/*.db
+# Environment variables and credentials
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Local SQLite database
+backend/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Generated frontend files
+node_modules/
+frontend/dist/

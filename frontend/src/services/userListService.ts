@@ -1,5 +1,5 @@
 
-const API_URL = "http://localhost:8000";
+const API_URL = window.location.origin;
 
 export type ListStatus = "visited" | "to_visit";
 
