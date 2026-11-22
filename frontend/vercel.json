@@ -4,7 +4,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REEMPLAZAR-BACKEND.up.railway.app/api/:path*"
+      "destination": "https://restaurant-recommender-production-b581fd2e.up.railway.app/api/:path*"
     },
     {
       "source": "/:path*",
